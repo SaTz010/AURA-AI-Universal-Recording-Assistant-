@@ -102,10 +102,10 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
-fonts:
-  - family: Poppins
-    fonts:
-      - asset: assets/fonts/Poppins-SemiBold.ttf
-        weight: 600
-      - asset: assets/fonts/Poppins-Regular.ttf
-        weight: 400
+  fonts:
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/Poppins-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Poppins-Regular.ttf
+          weight: 400

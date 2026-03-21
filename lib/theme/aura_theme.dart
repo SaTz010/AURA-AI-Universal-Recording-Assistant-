@@ -320,3 +320,4 @@ ThemeData buildAuraLightTheme() {
     ),
   );
 }
+
