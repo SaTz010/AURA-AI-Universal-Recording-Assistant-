@@ -1,0 +1,288 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import '../theme/aura_theme.dart';
+import '../theme/aura_tokens.dart';
+import '../theme/theme_provider.dart';
+
+class SettingsScreen extends StatelessWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AuraThemeColors.of(context);
+    final themeNotifier = AuraThemeProvider.of(context);
+
+    return Scaffold(
+      backgroundColor: colors.background,
+      appBar: AppBar(
+        backgroundColor: colors.surface,
+        elevation: 0,
+        leading: _BackButton(),
+        title: Text('Settings', style: AuraTypography.titleLarge(colors.textPrimary)),
+        centerTitle: true,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AuraSpacing.base,
+          vertical: AuraSpacing.xl,
+        ),
+        children: [
+          _SectionHeader(title: 'Appearance'),
+          const SizedBox(height: AuraSpacing.sm),
+          _SettingsCard(
+            children: [
+              _ThemeOptionTile(
+                title: 'Dark Mode',
+                subtitle: 'Deep space dark theme',
+                icon: Icons.dark_mode_rounded,
+                isSelected: themeNotifier.themeMode == ThemeMode.dark,
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  themeNotifier.setThemeMode(ThemeMode.dark);
+                },
+              ),
+              Divider(height: 1, color: colors.border),
+              _ThemeOptionTile(
+                title: 'Light Mode',
+                subtitle: 'Clean bright interface',
+                icon: Icons.light_mode_rounded,
+                isSelected: themeNotifier.themeMode == ThemeMode.light,
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  themeNotifier.setThemeMode(ThemeMode.light);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: AuraSpacing.xxl),
+          _SectionHeader(title: 'General'),
+          const SizedBox(height: AuraSpacing.sm),
+          _SettingsCard(
+            children: [
+              _SettingsTile(
+                icon: Icons.notifications_rounded,
+                title: 'Notifications',
+                trailing: Icon(
+                  Icons.chevron_right_rounded,
+                  color: colors.textTertiary,
+                ),
+              ),
+              Divider(height: 1, color: colors.border),
+              _SettingsTile(
+                icon: Icons.storage_rounded,
+                title: 'Storage',
+                trailing: Icon(
+                  Icons.chevron_right_rounded,
+                  color: colors.textTertiary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AuraSpacing.xxl),
+          _SectionHeader(title: 'About'),
+          const SizedBox(height: AuraSpacing.sm),
+          _SettingsCard(
+            children: [
+              _SettingsTile(
+                icon: Icons.info_outline_rounded,
+                title: 'Version',
+                trailing: Text(
+                  '1.0.0',
+                  style: AuraTypography.bodySmall(colors.textSecondary),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BackButton extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final colors = AuraThemeColors.of(context);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: AuraRadius.smBr,
+        onTap: () {
+          HapticFeedback.lightImpact();
+          Navigator.pop(context);
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(AuraSpacing.sm),
+          child: Icon(Icons.arrow_back_rounded, color: colors.iconDefault),
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  const _SectionHeader({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AuraThemeColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(left: AuraSpacing.xs),
+      child: Text(
+        title.toUpperCase(),
+        style: AuraTypography.overline(colors.textTertiary).copyWith(
+          fontWeight: FontWeight.w600,
+          letterSpacing: 1.5,
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsCard extends StatelessWidget {
+  final List<Widget> children;
+  const _SettingsCard({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AuraThemeColors.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: AuraRadius.mdBr,
+        border: Border.all(color: colors.border),
+        boxShadow: AuraElevation.low(Colors.black),
+      ),
+      child: ClipRRect(
+        borderRadius: AuraRadius.mdBr,
+        child: Column(
+          children: children,
+        ),
+      ),
+    );
+  }
+}
+
+class _ThemeOptionTile extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _ThemeOptionTile({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AuraThemeColors.of(context);
+    return Material(
+      color: isSelected ? colors.shimmer : Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AuraSpacing.base,
+            vertical: AuraSpacing.md,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? colors.accent.withValues(alpha: 0.15)
+                      : colors.surfaceElevated,
+                  borderRadius: AuraRadius.smBr,
+                ),
+                child: Icon(
+                  icon,
+                  size: 20,
+                  color: isSelected ? colors.accent : colors.textTertiary,
+                ),
+              ),
+              const SizedBox(width: AuraSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: AuraTypography.bodyLarge(colors.textPrimary)),
+                    const SizedBox(height: AuraSpacing.xxs),
+                    Text(subtitle, style: AuraTypography.caption(colors.textSecondary)),
+                  ],
+                ),
+              ),
+              AnimatedContainer(
+                duration: AuraMotion.fast,
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: isSelected ? colors.accent : colors.textTertiary,
+                    width: isSelected ? 6 : 1.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final Widget? trailing;
+
+  const _SettingsTile({
+    required this.icon,
+    required this.title,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AuraThemeColors.of(context);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {},
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AuraSpacing.base,
+            vertical: AuraSpacing.md,
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: colors.surfaceElevated,
+                  borderRadius: AuraRadius.smBr,
+                ),
+                child: Icon(icon, size: 20, color: colors.textTertiary),
+              ),
+              const SizedBox(width: AuraSpacing.md),
+              Expanded(
+                child: Text(title, style: AuraTypography.bodyLarge(colors.textPrimary)),
+              ),
+              trailing ?? const SizedBox.shrink(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

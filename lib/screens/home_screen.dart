@@ -1,11 +1,15 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
-import 'dart:io';
-import 'dart:math';
 import 'package:permission_handler/permission_handler.dart';
+
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
+import 'widgets/main_bottom_nav.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,13 +24,15 @@ class _HomeScreenState extends State<HomeScreen>
   late AnimationController _micController;
   late AnimationController _waveController;
   late Animation<double> _pulseAnimation;
+
   bool _isRecording = false;
-  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  
+  int _selectedBottomIndex = 0;
+
   static const platform = MethodChannel('com.aura.recording/audio');
   String? _recordingStatus = '';
-  bool _isProcessing = false; // Guards against concurrent start/stop calls
+  bool _isProcessing = false;
   late Stopwatch _recordingStopwatch;
+  Timer? _recordingStatusTimer;
 
   @override
   void initState() {
@@ -34,7 +40,6 @@ class _HomeScreenState extends State<HomeScreen>
     WidgetsBinding.instance.addObserver(this);
     _recordingStopwatch = Stopwatch();
 
-    // Pulse animation for the sonar rings
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
@@ -44,13 +49,11 @@ class _HomeScreenState extends State<HomeScreen>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeOut),
     );
 
-    // Mic button scale animation for press feedback
     _micController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
 
-    // Sound wave animation controller
     _waveController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
@@ -60,23 +63,42 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    // If recording is still active when widget is disposed, stop it
+
     if (_isRecording) {
       platform.invokeMethod('stopRecording').catchError((_) {});
       platform.invokeMethod('setWakeLock', {'enabled': false}).catchError((_) {});
     }
+
     _pulseController.dispose();
     _micController.dispose();
     _waveController.dispose();
     _recordingStopwatch.stop();
+    _recordingStatusTimer?.cancel();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // If the app is being killed, attempt to finalize the recording
     if (state == AppLifecycleState.detached && _isRecording) {
       _stopRecording();
+    }
+  }
+
+  void _setRecordingStatus(String message, {Duration? clearAfter}) {
+    _recordingStatusTimer?.cancel();
+    if (mounted) {
+      setState(() {
+        _recordingStatus = message;
+      });
+    }
+
+    if (clearAfter != null) {
+      _recordingStatusTimer = Timer(clearAfter, () {
+        if (!mounted) return;
+        setState(() {
+          _recordingStatus = '';
+        });
+      });
     }
   }
 
@@ -90,8 +112,8 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _startRecording() async {
     if (_isProcessing) return;
     _isProcessing = true;
+
     try {
-      // Request microphone permission
       final permission = await Permission.microphone.request();
       if (!permission.isGranted) {
         if (mounted) {
@@ -102,27 +124,19 @@ class _HomeScreenState extends State<HomeScreen>
         return;
       }
 
-      // Get application documents directory
       final dir = await getApplicationDocumentsDirectory();
       final filePath = '${dir.path}/recording_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
-      // Call platform method to start recording
       await platform.invokeMethod('startRecording', {'path': filePath});
-
-      // Acquire partial wakelock — keeps CPU active when screen is off
       await platform.invokeMethod('setWakeLock', {'enabled': true}).catchError((_) {});
 
-      // IMPORTANT: Set _isRecording BEFORE starting the timer loop.
-      // Previously this was set AFTER Future.doWhile, causing the loop
-      // to exit immediately on its first iteration (race condition).
       setState(() {
         _isRecording = true;
-        _recordingStatus = 'Recording...';
       });
+      _setRecordingStatus('Recording...');
 
       _recordingStopwatch.start();
 
-      // Update UI every 100ms for the recording timer display
       Future.doWhile(() async {
         if (!_isRecording) return false;
         await Future.delayed(const Duration(milliseconds: 100));
@@ -136,7 +150,10 @@ class _HomeScreenState extends State<HomeScreen>
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Recording started'), duration: Duration(seconds: 1)),
+          const SnackBar(
+            content: Text('Recording started'),
+            duration: Duration(seconds: 1),
+          ),
         );
       }
     } catch (e) {
@@ -153,12 +170,11 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _stopRecording() async {
     if (_isProcessing) return;
     _isProcessing = true;
+
     try {
-      // Call platform method to stop recording
       final result = await platform.invokeMethod('stopRecording');
       final path = result as String?;
 
-      // Release wakelock
       await platform.invokeMethod('setWakeLock', {'enabled': false}).catchError((_) {});
 
       _recordingStopwatch.stop();
@@ -166,15 +182,36 @@ class _HomeScreenState extends State<HomeScreen>
 
       setState(() {
         _isRecording = false;
-        _recordingStatus = path != null ? 'Recording saved: ${File(path).path.split('/').last}' : 'Recording failed';
       });
+      _setRecordingStatus(path != null ? 'Finalizing recording...' : 'Recording failed');
 
       _micController.reverse();
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Recording saved: $path')),
-        );
+      if (path != null) {
+        final recordedFile = File(path);
+        if (await recordedFile.exists()) {
+          final defaultName = await _getNextAuraRecordingBaseName();
+          if (!mounted) return;
+
+          final userInput = await _showRecordingNameDialog(defaultName);
+          final chosenBaseName = _sanitizeRecordingName(
+            userInput == null || userInput.trim().isEmpty ? defaultName : userInput,
+          );
+          final renamedPath = await _renameRecordingFile(recordedFile, chosenBaseName);
+          final finalName = renamedPath != null
+              ? File(renamedPath).path.split('/').last
+              : recordedFile.path.split('/').last;
+
+          if (!mounted) return;
+          _setRecordingStatus(
+            'Recording saved: $finalName',
+            clearAfter: const Duration(seconds: 5),
+          );
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Recording saved: $finalName')),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -187,11 +224,136 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
+  Future<String> _getNextAuraRecordingBaseName() async {
+    final dir = await getApplicationDocumentsDirectory();
+    final entries = dir.listSync();
+    final auraPattern = RegExp(r'^Aura_(\d+)$', caseSensitive: false);
+    var maxIndex = 0;
+
+    for (final entry in entries) {
+      if (entry is! File || !entry.path.toLowerCase().endsWith('.m4a')) {
+        continue;
+      }
+
+      final fileName = entry.path.split('/').last;
+      final baseName = fileName.replaceAll(RegExp(r'\.m4a$', caseSensitive: false), '');
+      final match = auraPattern.firstMatch(baseName);
+      if (match != null) {
+        final parsed = int.tryParse(match.group(1) ?? '0') ?? 0;
+        if (parsed > maxIndex) {
+          maxIndex = parsed;
+        }
+      }
+    }
+
+    return 'Aura_${maxIndex + 1}';
+  }
+
+  String _sanitizeRecordingName(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return '';
+    return trimmed.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+  }
+
+  Future<String?> _showRecordingNameDialog(String defaultName) async {
+    final controller = TextEditingController(text: defaultName);
+    final colors = AuraThemeColors.of(context);
+
+    return showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: colors.surface,
+          title: const Text('Name your recording'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(
+              labelText: 'Recording name',
+              hintText: 'Aura_1',
+            ),
+            onSubmitted: (value) => Navigator.pop(dialogContext, value),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, defaultName),
+              child: const Text('Use default'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(dialogContext, controller.text),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<String?> _renameRecordingFile(File originalFile, String preferredBaseName) async {
+    final safeBase = preferredBaseName.isEmpty ? 'Aura_1' : preferredBaseName;
+    final dir = await getApplicationDocumentsDirectory();
+    var attempt = 0;
+
+    while (attempt < 1000) {
+      final suffix = attempt == 0 ? '' : '_$attempt';
+      final candidatePath = '${dir.path}/$safeBase$suffix.m4a';
+      final candidateFile = File(candidatePath);
+
+      if (!await candidateFile.exists()) {
+        final renamed = await originalFile.rename(candidatePath);
+        return renamed.path;
+      }
+
+      attempt++;
+    }
+
+    return null;
+  }
+
   void _onMicPressed() {
     if (_isRecording) {
       _stopRecording();
     } else {
       _startRecording();
+    }
+  }
+
+  void _showRecordingLockMessage() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Stop recording to access other sections.'),
+        duration: Duration(milliseconds: 900),
+      ),
+    );
+  }
+
+  Future<void> _onBottomNavTapped(int index) async {
+    if (_isRecording) {
+      _showRecordingLockMessage();
+      return;
+    }
+
+    if (index == _selectedBottomIndex) return;
+    setState(() => _selectedBottomIndex = index);
+
+    switch (index) {
+      case 0:
+        return;
+      case 1:
+        await Navigator.pushNamed(context, '/recordings');
+        break;
+      case 2:
+        await Navigator.pushNamed(context, '/history');
+        break;
+      case 3:
+        await Navigator.pushNamed(context, '/summary');
+        break;
+    }
+
+    if (mounted) {
+      setState(() => _selectedBottomIndex = 0);
     }
   }
 
@@ -202,11 +364,10 @@ class _HomeScreenState extends State<HomeScreen>
       builder: (context, child) {
         return Column(
           children: [
-            // Sound Wave Bars
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(7, (index) {
-                double waveHeight = 8.0 +
+                final waveHeight = 8.0 +
                     (16.0 * sin((_waveController.value * 2 * pi) + (index * pi / 3.5)));
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 3.5),
@@ -223,7 +384,6 @@ class _HomeScreenState extends State<HomeScreen>
               }),
             ),
             const SizedBox(height: AuraSpacing.md),
-            // Recording Timer
             Text(
               _formatRecordingTime(_recordingStopwatch.elapsed),
               style: AuraTypography.titleMedium(colors.textSecondary).copyWith(
@@ -249,20 +409,22 @@ class _HomeScreenState extends State<HomeScreen>
         final sheetColors = AuraThemeColors.of(sheetContext);
         return Padding(
           padding: const EdgeInsets.fromLTRB(
-            AuraSpacing.xl, AuraSpacing.xl, AuraSpacing.xl, AuraSpacing.xxl,
+            AuraSpacing.xl,
+            AuraSpacing.xl,
+            AuraSpacing.xl,
+            AuraSpacing.xxl,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Handle indicator
               Center(
                 child: Container(
                   width: 36,
                   height: 4,
                   margin: const EdgeInsets.only(bottom: AuraSpacing.lg),
                   decoration: BoxDecoration(
-                    color: sheetColors.textTertiary.withOpacity(0.3),
+                    color: sheetColors.textTertiary.withValues(alpha: 0.3),
                     borderRadius: AuraRadius.fullBr,
                   ),
                 ),
@@ -306,152 +468,88 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
-    return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor: colors.background,
-      drawer: _buildDrawer(context),
-      body: SafeArea(
-        child: Column(
-          children: [
-            // ── Top bar ──────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AuraSpacing.xl,
-                vertical: AuraSpacing.base,
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Material(
-                    color: Colors.transparent,
-                    borderRadius: AuraRadius.smBr,
-                    child: InkWell(
-                      borderRadius: AuraRadius.smBr,
-                      onTap: () {
-                        HapticFeedback.lightImpact();
-                        _scaffoldKey.currentState?.openDrawer();
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(AuraSpacing.xs),
-                        child: Icon(
-                          Icons.menu_rounded,
-                          color: colors.iconDefault,
-                          size: 26,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 26),
-                ],
-              ),
-            ),
 
-            // ── Branding ─────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: AuraSpacing.xxl),
-              child: Column(
-                children: [
-                  Text(
-                    'AURA',
-                    style: AuraTypography.headlineLarge(colors.textPrimary),
-                  ),
-                  const SizedBox(height: AuraSpacing.sm),
-                  Container(
-                    width: 40,
-                    height: 2,
-                    decoration: BoxDecoration(
-                      color: colors.textTertiary.withOpacity(0.5),
-                      borderRadius: AuraRadius.fullBr,
-                    ),
-                  ),
-                  const SizedBox(height: AuraSpacing.base),
-                  Text(
-                    'Record now or import\nexisting audio files to get started',
-                    textAlign: TextAlign.center,
-                    style: AuraTypography.bodyLarge(colors.textSecondary),
-                  ),
-                ],
-              ),
-            ),
-
-            // ── Mic button ───────────────────────────────────────
-            Expanded(
-              child: Center(
-                child: Stack(
-                  alignment: Alignment.center,
+    return PopScope(
+      canPop: !_isRecording,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && _isRecording) {
+          _showRecordingLockMessage();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: colors.background,
+        bottomNavigationBar: MainBottomNav(
+          selectedIndex: _selectedBottomIndex,
+          onTap: _onBottomNavTapped,
+        ),
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AuraSpacing.xl,
+                  vertical: AuraSpacing.base,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Pulsing sonar rings
-                    AnimatedBuilder(
-                      animation: _pulseAnimation,
-                      builder: (context, child) {
-                        return Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Container(
-                              width: 220 + (_pulseAnimation.value * 40),
-                              height: 220 + (_pulseAnimation.value * 40),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: colors.accent.withOpacity(
-                                    (1 - _pulseAnimation.value) * 0.25,
-                                  ),
-                                  width: 1.5,
+                    Row(
+                      children: [
+                        Material(
+                          color: Colors.transparent,
+                          shape: const CircleBorder(),
+                          child: InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: () {
+                              if (_isRecording) {
+                                _showRecordingLockMessage();
+                                return;
+                              }
+                              HapticFeedback.lightImpact();
+                              Navigator.pushNamed(context, '/profile');
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.all(AuraSpacing.xxs),
+                              child: CircleAvatar(
+                                radius: 17,
+                                backgroundColor: colors.surfaceElevated,
+                                child: Icon(
+                                  Icons.person_rounded,
+                                  color: colors.iconDefault,
+                                  size: 20,
                                 ),
                               ),
                             ),
-                            Container(
-                              width: 190 + (_pulseAnimation.value * 30),
-                              height: 190 + (_pulseAnimation.value * 30),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: colors.accent.withOpacity(
-                                    (1 - _pulseAnimation.value) * 0.12,
-                                  ),
-                                  width: 1,
-                                ),
-                              ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-
-                    // Main mic button
-                    GestureDetector(
-                      onTap: () {
-                        HapticFeedback.mediumImpact();
-                        _onMicPressed();
-                      },
-                      child: ScaleTransition(
-                        scale: Tween<double>(begin: 1.0, end: 0.92)
-                            .animate(CurvedAnimation(
-                          parent: _micController,
-                          curve: AuraMotion.standard,
-                        )),
-                        child: Container(
-                          width: 140,
-                          height: 140,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: colors.micButton,
-                            boxShadow: AuraElevation.glow(colors.micButton),
                           ),
-                          child: Center(
-                            child: AnimatedSwitcher(
-                              duration: AuraMotion.fast,
-                              transitionBuilder: (child, anim) =>
-                                  ScaleTransition(scale: anim, child: child),
-                              child: Icon(
-                                _isRecording
-                                    ? Icons.stop_rounded
-                                    : Icons.mic_rounded,
-                                key: ValueKey(_isRecording),
-                                size: 56,
-                                color: colors.micIcon,
-                              ),
-                            ),
+                        ),
+                        const SizedBox(width: AuraSpacing.sm),
+                        Text(
+                          'Hi, Sanskar ',
+                          style: AuraTypography.bodyMedium(colors.textPrimary).copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Material(
+                      color: Colors.transparent,
+                      borderRadius: AuraRadius.smBr,
+                      child: InkWell(
+                        borderRadius: AuraRadius.smBr,
+                        onTap: () {
+                          if (_isRecording) {
+                            _showRecordingLockMessage();
+                            return;
+                          }
+                          HapticFeedback.lightImpact();
+                          Navigator.pushNamed(context, '/settings');
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(AuraSpacing.xs),
+                          child: Icon(
+                            Icons.settings_rounded,
+                            color: colors.iconDefault,
+                            size: 24,
                           ),
                         ),
                       ),
@@ -459,214 +557,197 @@ class _HomeScreenState extends State<HomeScreen>
                   ],
                 ),
               ),
-            ),
-
-            // ── Bottom section ───────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.only(bottom: 80),
-              child: Column(
-                children: [
-                  // Wave visualisation
-                  if (_isRecording)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: AuraSpacing.xl),
-                      child: _buildSoundWaveVisualization(),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: AuraSpacing.xxl),
+                child: Column(
+                  children: [
+                    Text(
+                      'AURA',
+                      style: AuraTypography.headlineLarge(colors.textPrimary),
                     ),
-
-                  // Helper text / status
-                  AnimatedSwitcher(
-                    duration: AuraMotion.fast,
-                    child: _isRecording
-                        ? const SizedBox.shrink()
-                        : Text(
-                            'Tap to start recording',
-                            key: const ValueKey('tap-hint'),
-                            style: AuraTypography.bodyMedium(colors.textSecondary),
-                          ),
-                  ),
-                  if (_recordingStatus != null &&
-                      _recordingStatus!.isNotEmpty &&
-                      !_isRecording)
-                    Padding(
-                      padding: const EdgeInsets.only(top: AuraSpacing.sm),
-                      child: Text(
-                        _recordingStatus!,
-                        textAlign: TextAlign.center,
-                        style: AuraTypography.overline(colors.accent),
+                    const SizedBox(height: AuraSpacing.sm),
+                    Container(
+                      width: 40,
+                      height: 2,
+                      decoration: BoxDecoration(
+                        color: colors.textTertiary.withValues(alpha: 0.5),
+                        borderRadius: AuraRadius.fullBr,
                       ),
                     ),
-
-                  const SizedBox(height: AuraSpacing.xl),
-
-                  // Divider
-                  Container(
-                    width: 48,
-                    height: 1,
-                    decoration: BoxDecoration(
-                      color: colors.divider,
-                      borderRadius: AuraRadius.fullBr,
+                    const SizedBox(height: AuraSpacing.base),
+                    Text(
+                      'Record now or import\nexisting audio files to get started',
+                      textAlign: TextAlign.center,
+                      style: AuraTypography.bodyLarge(colors.textSecondary),
                     ),
-                  ),
-
-                  const SizedBox(height: AuraSpacing.xl),
-
-                  // Import button
-                  Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      borderRadius: AuraRadius.mdBr,
-                      onTap: _showUploadSheet,
-                      child: Container(
-                        width: MediaQuery.of(context).size.width * 0.72,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AuraSpacing.base,
-                          vertical: AuraSpacing.md,
-                        ),
-                        decoration: BoxDecoration(
-                          color: colors.surface,
-                          borderRadius: AuraRadius.mdBr,
-                          border: Border.all(color: colors.border),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.cloud_upload_outlined,
-                              color: colors.accent,
-                              size: 20,
-                            ),
-                            const SizedBox(width: AuraSpacing.sm),
-                            Text(
-                              'Import existing audio',
-                              style: AuraTypography.labelSmall(colors.accent),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDrawer(BuildContext context) {
-    final colors = AuraThemeColors.of(context);
-    return Drawer(
-      backgroundColor: colors.surface,
-      child: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.symmetric(vertical: AuraSpacing.xl),
-          children: [
-            // ── Drawer header ──────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AuraSpacing.xl,
-                vertical: AuraSpacing.xxl,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('AURA', style: AuraTypography.headlineLarge(colors.textPrimary)),
-                  const SizedBox(height: AuraSpacing.sm),
-                  Text(
-                    'AI Universal Recording Assistant',
-                    style: AuraTypography.overline(colors.textSecondary),
-                  ),
-                ],
-              ),
-            ),
-
-            Divider(color: colors.divider),
-
-            const SizedBox(height: AuraSpacing.xl),
-
-            _buildDrawerMenuItem(context, icon: Icons.mic_rounded, label: 'Recordings', onTap: () {
-              Navigator.pop(context);
-              Navigator.pushNamed(context, '/recordings');
-            }),
-            _buildDrawerMenuItem(context, icon: Icons.person_rounded, label: 'Profile', onTap: () {
-              Navigator.pop(context);
-              Navigator.pushNamed(context, '/profile');
-            }),
-            _buildDrawerMenuItem(context, icon: Icons.settings_rounded, label: 'Settings', onTap: () {
-              Navigator.pop(context);
-              Navigator.pushNamed(context, '/settings');
-            }),
-            _buildDrawerMenuItem(context, icon: Icons.history_rounded, label: 'History', onTap: () {
-              Navigator.pop(context);
-              Navigator.pushNamed(context, '/history');
-            }),
-            _buildDrawerMenuItem(context, icon: Icons.info_rounded, label: 'About', onTap: () {
-              Navigator.pop(context);
-              Navigator.pushNamed(context, '/about');
-            }),
-
-            const SizedBox(height: AuraSpacing.xl),
-            Divider(color: colors.divider),
-            const SizedBox(height: AuraSpacing.xl),
-
-            _buildDrawerMenuItem(
-              context,
-              icon: Icons.logout_rounded,
-              label: 'Logout',
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, '/logout');
-              },
-              isHighlighted: true,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDrawerMenuItem(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    bool isHighlighted = false,
-  }) {
-    final colors = AuraThemeColors.of(context);
-    final itemColor = isHighlighted ? colors.textPrimary : colors.textSecondary;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AuraSpacing.base,
-        vertical: AuraSpacing.xxs,
-      ),
-      child: Material(
-        color: isHighlighted
-            ? colors.textTertiary.withOpacity(0.12)
-            : Colors.transparent,
-        borderRadius: AuraRadius.smBr,
-        child: InkWell(
-          borderRadius: AuraRadius.smBr,
-          onTap: () {
-            HapticFeedback.selectionClick();
-            onTap();
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AuraSpacing.base,
-              vertical: AuraSpacing.md,
-            ),
-            child: Row(
-              children: [
-                Icon(icon, color: itemColor, size: 22),
-                const SizedBox(width: AuraSpacing.base),
-                Text(
-                  label,
-                  style: AuraTypography.bodyLarge(itemColor),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              Expanded(
+                child: Center(
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      AnimatedBuilder(
+                        animation: _pulseAnimation,
+                        builder: (context, child) {
+                          return Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              Container(
+                                width: 220 + (_pulseAnimation.value * 40),
+                                height: 220 + (_pulseAnimation.value * 40),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: colors.accent.withValues(
+                                      alpha: (1 - _pulseAnimation.value) * 0.25,
+                                    ),
+                                    width: 1.5,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                width: 190 + (_pulseAnimation.value * 30),
+                                height: 190 + (_pulseAnimation.value * 30),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: colors.accent.withValues(
+                                      alpha: (1 - _pulseAnimation.value) * 0.12,
+                                    ),
+                                    width: 1,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          HapticFeedback.mediumImpact();
+                          _onMicPressed();
+                        },
+                        child: ScaleTransition(
+                          scale: Tween<double>(begin: 1.0, end: 0.92).animate(
+                            CurvedAnimation(
+                              parent: _micController,
+                              curve: AuraMotion.standard,
+                            ),
+                          ),
+                          child: Container(
+                            width: 140,
+                            height: 140,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: colors.micButton,
+                              boxShadow: AuraElevation.glow(colors.micButton),
+                            ),
+                            child: Center(
+                              child: AnimatedSwitcher(
+                                duration: AuraMotion.fast,
+                                transitionBuilder: (child, anim) =>
+                                    ScaleTransition(scale: anim, child: child),
+                                child: Icon(
+                                  _isRecording ? Icons.stop_rounded : Icons.mic_rounded,
+                                  key: ValueKey(_isRecording),
+                                  size: 56,
+                                  color: colors.micIcon,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 80),
+                child: Column(
+                  children: [
+                    if (_isRecording)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: AuraSpacing.xl),
+                        child: _buildSoundWaveVisualization(),
+                      ),
+                    AnimatedSwitcher(
+                      duration: AuraMotion.fast,
+                      child: _isRecording
+                          ? const SizedBox.shrink()
+                          : Text(
+                              'Tap to start recording',
+                              key: const ValueKey('tap-hint'),
+                              style: AuraTypography.bodyMedium(colors.textSecondary),
+                            ),
+                    ),
+                    if (_recordingStatus != null &&
+                        _recordingStatus!.isNotEmpty &&
+                        !_isRecording)
+                      Padding(
+                        padding: const EdgeInsets.only(top: AuraSpacing.sm),
+                        child: Text(
+                          _recordingStatus!,
+                          textAlign: TextAlign.center,
+                          style: AuraTypography.overline(colors.accent),
+                        ),
+                      ),
+                    const SizedBox(height: AuraSpacing.xl),
+                    Container(
+                      width: 48,
+                      height: 1,
+                      decoration: BoxDecoration(
+                        color: colors.divider,
+                        borderRadius: AuraRadius.fullBr,
+                      ),
+                    ),
+                    const SizedBox(height: AuraSpacing.xl),
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: AuraRadius.mdBr,
+                        onTap: () {
+                          if (_isRecording) {
+                            _showRecordingLockMessage();
+                            return;
+                          }
+                          _showUploadSheet();
+                        },
+                        child: Container(
+                          width: MediaQuery.of(context).size.width * 0.72,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AuraSpacing.base,
+                            vertical: AuraSpacing.md,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colors.surface,
+                            borderRadius: AuraRadius.mdBr,
+                            border: Border.all(color: colors.border),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.cloud_upload_outlined,
+                                color: colors.accent,
+                                size: 20,
+                              ),
+                              const SizedBox(width: AuraSpacing.sm),
+                              Text(
+                                'Import existing audio',
+                                style: AuraTypography.labelSmall(colors.accent),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),

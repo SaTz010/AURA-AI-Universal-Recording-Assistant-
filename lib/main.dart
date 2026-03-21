@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'screens/history_screen.dart';
 import 'screens/initial_animation.dart';
 import 'screens/home_screen.dart';
 import 'screens/placeholder_screen.dart';
+import 'screens/profile_screen.dart';
+import 'screens/recordings_screen.dart';
+import 'screens/settings_screen.dart';
+import 'screens/summary_screen.dart';
 import 'theme/aura_theme.dart';
 import 'theme/theme_provider.dart';
 
@@ -42,6 +47,7 @@ class _MyAppState extends State<MyApp> {
             routes: {
               '/home': (context) => const HomeScreen(),
               '/profile': (context) => const ProfileScreen(),
+              '/summary': (context) => const SummaryScreen(),
               '/recordings': (context) => const RecordingsScreen(),
               '/settings': (context) => const SettingsScreen(),
               '/history': (context) => const HistoryScreen(),

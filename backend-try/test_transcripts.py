@@ -15,16 +15,191 @@ BASE_URL = "http://localhost:8000"
 TEST_TRANSCRIPTS = {
 
     "Team Meeting": """
-        Good morning everyone. Welcome to our Q1 product planning meeting. The mobile app
-        redesign is about 70 percent complete. Ahmed has been leading the frontend work and
-        the new UI components are looking great. However, we are behind on the API integration.
-        Sarah, I need you to prioritize the authentication module this week. The deadline for
-        the beta release is April 1st and we cannot slip on that. Moving on to the analytics
-        dashboard, we have decided to switch from Chart.js to D3 for better customization.
-        Mike, can you start the migration by Wednesday? Also, regarding the budget, we got
-        approval for two additional developer hires. HR will start posting the job listings
-        next Monday. One more thing, the client demo is scheduled for March 28th. Everyone
-        needs to have their features demo-ready by March 25th.
+        Professor:
+Good morning everyone. Today we’re going to begin our introduction to Neural Networks, which are one of the foundational components of modern machine learning systems.
+
+Before we dive deep, I want to start with a simple question.
+
+Why do we even need neural networks when we already have traditional algorithms?
+
+Think about image recognition, speech recognition, or language translation. These tasks are extremely difficult to solve using traditional rule-based programming.
+
+Instead of writing rules manually, neural networks learn patterns from data.
+
+At a high level, a neural network is inspired by the human brain. In our brain we have neurons connected through synapses. In artificial neural networks we also have nodes, which we call neurons, connected through weighted connections.
+
+These networks learn by adjusting those weights.
+
+Student 1:
+Professor, when you say weights, what exactly do you mean?
+
+Professor:
+Good question.
+
+A weight represents the importance of a connection between two neurons.
+
+Imagine you are trying to classify whether an email is spam or not.
+
+Some words like "free" or "win" might have a high weight toward spam classification.
+
+Other words like "meeting" or "schedule" might contribute more toward normal emails.
+
+During training, the neural network adjusts these weights automatically based on data.
+
+Professor:
+Now let’s talk about the basic structure of a neural network.
+
+A neural network typically has three main types of layers:
+
+Input Layer
+
+Hidden Layers
+
+Output Layer
+
+The input layer receives the raw data.
+
+For example, if we’re classifying handwritten digits, the input could be pixel values from an image.
+
+Hidden layers perform intermediate computations and extract features.
+
+Finally, the output layer produces the prediction.
+
+Student 2:
+How many hidden layers can a neural network have?
+
+Professor:
+Technically, there is no strict limit.
+
+However, networks with many hidden layers are called Deep Neural Networks, which is where the term deep learning comes from.
+
+Deep learning models can have dozens or even hundreds of layers depending on the architecture.
+
+Professor:
+Now let’s briefly discuss how neural networks learn.
+
+The learning process mainly involves two steps:
+
+Forward Propagation
+
+Backpropagation
+
+In forward propagation, the input data moves through the network layer by layer until we get a prediction.
+
+Then we compare the prediction with the actual answer.
+
+The difference between them is called the loss or error.
+
+Backpropagation is the process of sending that error backward through the network to adjust the weights.
+
+This adjustment usually uses an optimization algorithm such as Gradient Descent.
+
+Student 3:
+Is gradient descent the only optimization method used?
+
+Professor:
+Not at all.
+
+Gradient descent is the basic one, but there are many improved versions like:
+
+Stochastic Gradient Descent (SGD)
+
+Adam Optimizer
+
+RMSProp
+
+These methods help models converge faster and avoid getting stuck in poor solutions.
+
+Professor:
+Let’s consider a simple example.
+
+Suppose we want to build a neural network that predicts house prices.
+
+Our inputs might include:
+
+House size
+
+Number of bedrooms
+
+Location
+
+Age of the property
+
+The network processes these features and outputs a predicted price.
+
+If the predicted price is far from the actual price, the model adjusts its internal weights during training.
+
+Over time, the predictions improve.
+
+Student 4:
+How much data do neural networks usually require?
+
+Professor:
+Another excellent question.
+
+Neural networks typically require large amounts of data to perform well.
+
+This is one reason why deep learning became practical only after the rise of big datasets and powerful GPUs.
+
+For example, training modern image recognition models often requires millions of labeled images.
+
+Professor:
+However, there are techniques to work with smaller datasets, such as:
+
+Data augmentation
+
+Transfer learning
+
+Pretrained models
+
+These methods allow us to reuse knowledge learned from other tasks.
+
+Student 5:
+What are the main limitations of neural networks?
+
+Professor:
+Great question.
+
+Despite their power, neural networks have several challenges:
+
+They require large computational resources.
+
+Training can take a long time.
+
+They are often considered black boxes, meaning their decisions are difficult to interpret.
+
+They can overfit if not properly regularized.
+
+Researchers are actively working on improving model interpretability and efficiency.
+
+Professor:
+Before we wrap up, I want to summarize today’s key idea:
+
+Neural networks are data-driven models that learn complex patterns by adjusting weights between artificial neurons.
+
+They have become the backbone of modern AI systems including:
+
+Speech recognition
+
+Computer vision
+
+Natural language processing
+
+Autonomous vehicles
+
+In the next lecture, we will explore activation functions and understand how neurons decide whether to activate.
+
+Please read Chapter 3 before next class.
+
+Any final questions?
+
+Student:
+Will we implement a neural network ourselves later?
+
+Professor:
+Yes. In two weeks we will implement a simple neural network from scratch in Python so that you understand what happens under the hood.
+
+Alright everyone, that’s all for today. See you next lecture.
     """,
 
     "Technical Discussion": """
