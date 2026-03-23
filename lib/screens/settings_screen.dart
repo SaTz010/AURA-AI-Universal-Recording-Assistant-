@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../providers/auth_provider.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
 import '../theme/theme_provider.dart';
@@ -91,6 +92,47 @@ class SettingsScreen extends StatelessWidget {
                   '1.0.0',
                   style: AuraTypography.bodySmall(colors.textSecondary),
                 ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AuraSpacing.xxl),
+          _SectionHeader(title: 'Account'),
+          const SizedBox(height: AuraSpacing.sm),
+          _SettingsCard(
+            children: [
+              _SettingsTile(
+                icon: Icons.logout_rounded,
+                title: 'Logout',
+                isDestructive: true,
+                onTap: () async {
+                  HapticFeedback.mediumImpact();
+                  final shouldLogout = await showDialog<bool>(
+                    context: context,
+                    builder: (dialogContext) {
+                      return AlertDialog(
+                        title: const Text('Logout'),
+                        content: const Text('Are you sure you want to log out?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(dialogContext).pop(false),
+                            child: const Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.of(dialogContext).pop(true),
+                            child: const Text('Logout'),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+
+                  if (shouldLogout == true && context.mounted) {
+                    final authProvider = AuraAuthProvider.of(context);
+                    await authProvider.signOut();
+                    if (!context.mounted) return;
+                    Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
+                  }
+                },
               ),
             ],
           ),
@@ -244,20 +286,28 @@ class _SettingsTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final Widget? trailing;
+  final VoidCallback? onTap;
+  final bool isDestructive;
 
   const _SettingsTile({
     required this.icon,
     required this.title,
     this.trailing,
+    this.onTap,
+    this.isDestructive = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
+    final destructiveColor = Theme.of(context).colorScheme.error;
+    final iconColor = isDestructive ? destructiveColor : colors.textTertiary;
+    final titleColor = isDestructive ? destructiveColor : colors.textPrimary;
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () {},
+        onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: AuraSpacing.base,
@@ -272,11 +322,11 @@ class _SettingsTile extends StatelessWidget {
                   color: colors.surfaceElevated,
                   borderRadius: AuraRadius.smBr,
                 ),
-                child: Icon(icon, size: 20, color: colors.textTertiary),
+                child: Icon(icon, size: 20, color: iconColor),
               ),
               const SizedBox(width: AuraSpacing.md),
               Expanded(
-                child: Text(title, style: AuraTypography.bodyLarge(colors.textPrimary)),
+                child: Text(title, style: AuraTypography.bodyLarge(titleColor)),
               ),
               trailing ?? const SizedBox.shrink(),
             ],

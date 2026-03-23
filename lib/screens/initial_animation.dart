@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'auth_screen.dart';
+import '../providers/auth_provider.dart';
 import 'home_screen.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
@@ -75,13 +78,18 @@ class _AuraSplashScreenState extends State<AuraSplashScreen>
 
       if (mounted) {
         _controller.forward();
-        // Navigate to home screen after animation completes
+        // Navigate to auth screen after animation completes
         Future.delayed(const Duration(milliseconds: 2600), () {
           if (mounted) {
+            final authProvider = AuraAuthProvider.of(context);
+            final hasSession = authProvider.isAuthenticated || FirebaseAuth.instance.currentUser != null;
+            final destination = hasSession
+                ? const HomeScreen()
+                : const AuraAuthScreen();
             Navigator.of(context).pushReplacement(
               PageRouteBuilder(
                 transitionDuration: AuraMotion.slow,
-                pageBuilder: (_, __, ___) => const HomeScreen(),
+                pageBuilder: (_, __, ___) => destination,
                 transitionsBuilder: (_, anim, __, child) {
                   return FadeTransition(
                     opacity: CurvedAnimation(
@@ -99,13 +107,18 @@ class _AuraSplashScreenState extends State<AuraSplashScreen>
     } catch (_) {
       if (mounted) {
         _controller.forward();
-        // Navigate to home screen after animation completes
+        // Navigate to auth screen after animation completes
         Future.delayed(const Duration(milliseconds: 2600), () {
           if (mounted) {
+            final authProvider = AuraAuthProvider.of(context);
+            final hasSession = authProvider.isAuthenticated || FirebaseAuth.instance.currentUser != null;
+            final destination = hasSession
+                ? const HomeScreen()
+                : const AuraAuthScreen();
             Navigator.of(context).pushReplacement(
               PageRouteBuilder(
                 transitionDuration: AuraMotion.slow,
-                pageBuilder: (_, __, ___) => const HomeScreen(),
+                pageBuilder: (_, __, ___) => destination,
                 transitionsBuilder: (_, anim, __, child) {
                   return FadeTransition(
                     opacity: CurvedAnimation(

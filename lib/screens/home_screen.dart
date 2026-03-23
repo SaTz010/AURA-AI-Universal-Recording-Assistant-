@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -468,6 +470,10 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final userDocStream = currentUser == null
+        ? null
+        : FirebaseFirestore.instance.collection('users').doc(currentUser.uid).snapshots();
 
     return PopScope(
       canPop: !_isRecording,
@@ -490,71 +496,98 @@ class _HomeScreenState extends State<HomeScreen>
                   horizontal: AuraSpacing.xl,
                   vertical: AuraSpacing.base,
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
+                child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                  stream: userDocStream,
+                  builder: (context, snapshot) {
+                    final data = snapshot.data?.data();
+                    final name = (data?['name'] as String?)?.trim();
+                    final photoUrl = (data?['photoUrl'] as String?)?.trim();
+
+                    final fallbackName =
+                        (currentUser?.displayName?.trim().isNotEmpty ?? false)
+                            ? currentUser!.displayName!.trim()
+                            : 'there';
+
+                    final displayName =
+                        (name != null && name.isNotEmpty) ? name : fallbackName;
+                    final effectivePhoto =
+                        (photoUrl != null && photoUrl.isNotEmpty)
+                            ? photoUrl
+                            : currentUser?.photoURL;
+
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
+                        Row(
+                          children: [
+                            Material(
+                              color: Colors.transparent,
+                              shape: const CircleBorder(),
+                              child: InkWell(
+                                customBorder: const CircleBorder(),
+                                onTap: () {
+                                  if (_isRecording) {
+                                    _showRecordingLockMessage();
+                                    return;
+                                  }
+                                  HapticFeedback.lightImpact();
+                                  Navigator.pushNamed(context, '/profile');
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.all(AuraSpacing.xxs),
+                                  child: CircleAvatar(
+                                    radius: 17,
+                                    backgroundColor: colors.surfaceElevated,
+                                    backgroundImage: (effectivePhoto != null &&
+                                            effectivePhoto.isNotEmpty)
+                                        ? NetworkImage(effectivePhoto)
+                                        : null,
+                                    child: (effectivePhoto == null || effectivePhoto.isEmpty)
+                                        ? Icon(
+                                            Icons.person_rounded,
+                                            color: colors.iconDefault,
+                                            size: 20,
+                                          )
+                                        : null,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: AuraSpacing.sm),
+                            Text(
+                              'Hi, $displayName',
+                              style: AuraTypography.bodyMedium(colors.textPrimary).copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
                         Material(
                           color: Colors.transparent,
-                          shape: const CircleBorder(),
+                          borderRadius: AuraRadius.smBr,
                           child: InkWell(
-                            customBorder: const CircleBorder(),
+                            borderRadius: AuraRadius.smBr,
                             onTap: () {
                               if (_isRecording) {
                                 _showRecordingLockMessage();
                                 return;
                               }
                               HapticFeedback.lightImpact();
-                              Navigator.pushNamed(context, '/profile');
+                              Navigator.pushNamed(context, '/settings');
                             },
                             child: Padding(
-                              padding: const EdgeInsets.all(AuraSpacing.xxs),
-                              child: CircleAvatar(
-                                radius: 17,
-                                backgroundColor: colors.surfaceElevated,
-                                child: Icon(
-                                  Icons.person_rounded,
-                                  color: colors.iconDefault,
-                                  size: 20,
-                                ),
+                              padding: const EdgeInsets.all(AuraSpacing.xs),
+                              child: Icon(
+                                Icons.settings_rounded,
+                                color: colors.iconDefault,
+                                size: 24,
                               ),
                             ),
                           ),
                         ),
-                        const SizedBox(width: AuraSpacing.sm),
-                        Text(
-                          'Hi, Sanskar ',
-                          style: AuraTypography.bodyMedium(colors.textPrimary).copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
                       ],
-                    ),
-                    Material(
-                      color: Colors.transparent,
-                      borderRadius: AuraRadius.smBr,
-                      child: InkWell(
-                        borderRadius: AuraRadius.smBr,
-                        onTap: () {
-                          if (_isRecording) {
-                            _showRecordingLockMessage();
-                            return;
-                          }
-                          HapticFeedback.lightImpact();
-                          Navigator.pushNamed(context, '/settings');
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(AuraSpacing.xs),
-                          child: Icon(
-                            Icons.settings_rounded,
-                            color: colors.iconDefault,
-                            size: 24,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                    );
+                  },
                 ),
               ),
               Padding(
