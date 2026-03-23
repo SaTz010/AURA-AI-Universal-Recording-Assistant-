@@ -3,6 +3,7 @@ import 'screens/history_screen.dart';
 import 'screens/auth_screen.dart';
 import 'screens/initial_animation.dart';
 import 'screens/home_screen.dart';
+import 'screens/legal_screen.dart';
 import 'screens/placeholder_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/recordings_screen.dart';
@@ -19,7 +20,6 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  print('Firebase initialized successfully');
   runApp(const MyApp());
 }
 
@@ -73,6 +73,8 @@ class _MyAppState extends State<MyApp> {
                 '/history': (context) => const HistoryScreen(),
                 '/about': (context) => const AboutScreen(),
                 '/logout': (context) => const LogoutScreen(),
+                '/terms': (context) => const TermsConditionsScreen(),
+                '/privacy': (context) => const PrivacyPolicyScreen(),
               },
             );
           },

@@ -40,6 +40,10 @@ class AuthService {
     return _firebaseAuth.signInWithCredential(credential);
   }
 
+  Future<UserCredential?> signInAsGuest() async {
+    return _firebaseAuth.signInAnonymously();
+  }
+
   Future<void> signOut() async {
     if (!_googleInitialized) {
       await _googleSignIn.initialize();

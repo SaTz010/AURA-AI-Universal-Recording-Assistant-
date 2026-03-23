@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -19,6 +21,7 @@ class AuthProvider extends ChangeNotifier {
   bool get initialized => _initialized;
   bool get isLoading => _isLoading;
   bool get isAuthenticated => _user != null;
+  bool get isGuest => _user?.isAnonymous ?? false;
   String? get errorMessage => _errorMessage;
   User? get user => _user;
   Map<String, String> get cachedUser => _cachedUser;
@@ -59,6 +62,40 @@ class AuthProvider extends ChangeNotifier {
       return false;
     } catch (_) {
       _errorMessage = 'Unable to continue with Google right now';
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<bool> signInAsGuest() async {
+    _setLoading(true);
+    _errorMessage = null;
+
+    try {
+      final credential = await _authService.signInAsGuest();
+      if (credential == null || credential.user == null) {
+        _errorMessage = 'Guest sign-in failed';
+        developer.log('Guest sign-in: credential or user is null');
+        return false;
+      }
+
+      _user = credential.user;
+      // Don't cache guest user data as they're temporary
+      _cachedUser = {
+        'name': 'Guest User',
+        'email': '',
+        'photoUrl': '',
+      };
+      developer.log('Guest sign-in successful: ${_user?.uid}');
+      return true;
+    } on FirebaseAuthException catch (e) {
+      developer.log('FirebaseAuthException during guest sign-in: code=${e.code}, message=${e.message}');
+      _errorMessage = _mapGuestAuthError(e.code);
+      return false;
+    } catch (e) {
+      developer.log('Unexpected error during guest sign-in: $e');
+      _errorMessage = 'Unable to continue as guest right now';
       return false;
     } finally {
       _setLoading(false);
@@ -109,6 +146,17 @@ class AuthProvider extends ChangeNotifier {
         return 'Sign-in cancelled';
       default:
         return 'Authentication failed. Please try again';
+    }
+  }
+
+  String _mapGuestAuthError(String code) {
+    switch (code) {
+      case 'operation-not-allowed':
+        return 'Guest sign-in is not enabled. Contact support.';
+      case 'network-request-failed':
+        return 'No internet connection';
+      default:
+        return 'Unable to continue as guest. Please try again.';
     }
   }
 

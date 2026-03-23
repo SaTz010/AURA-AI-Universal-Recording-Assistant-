@@ -13,6 +13,7 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
     final themeNotifier = AuraThemeProvider.of(context);
+    final authProvider = AuraAuthProvider.of(context);
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -95,47 +96,48 @@ class SettingsScreen extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: AuraSpacing.xxl),
-          _SectionHeader(title: 'Account'),
-          const SizedBox(height: AuraSpacing.sm),
-          _SettingsCard(
-            children: [
-              _SettingsTile(
-                icon: Icons.logout_rounded,
-                title: 'Logout',
-                isDestructive: true,
-                onTap: () async {
-                  HapticFeedback.mediumImpact();
-                  final shouldLogout = await showDialog<bool>(
-                    context: context,
-                    builder: (dialogContext) {
-                      return AlertDialog(
-                        title: const Text('Logout'),
-                        content: const Text('Are you sure you want to log out?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(dialogContext).pop(false),
-                            child: const Text('Cancel'),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.of(dialogContext).pop(true),
-                            child: const Text('Logout'),
-                          ),
-                        ],
-                      );
-                    },
-                  );
+          if (!authProvider.isGuest) ...[
+            const SizedBox(height: AuraSpacing.xxl),
+            _SectionHeader(title: 'Account'),
+            const SizedBox(height: AuraSpacing.sm),
+            _SettingsCard(
+              children: [
+                _SettingsTile(
+                  icon: Icons.logout_rounded,
+                  title: 'Logout',
+                  isDestructive: true,
+                  onTap: () async {
+                    HapticFeedback.mediumImpact();
+                    final shouldLogout = await showDialog<bool>(
+                      context: context,
+                      builder: (dialogContext) {
+                        return AlertDialog(
+                          title: const Text('Logout'),
+                          content: const Text('Are you sure you want to log out?'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(dialogContext).pop(false),
+                              child: const Text('Cancel'),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.of(dialogContext).pop(true),
+                              child: const Text('Logout'),
+                            ),
+                          ],
+                        );
+                      },
+                    );
 
-                  if (shouldLogout == true && context.mounted) {
-                    final authProvider = AuraAuthProvider.of(context);
-                    await authProvider.signOut();
-                    if (!context.mounted) return;
-                    Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
-                  }
-                },
-              ),
-            ],
-          ),
+                    if (shouldLogout == true && context.mounted) {
+                      await authProvider.signOut();
+                      if (!context.mounted) return;
+                      Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
