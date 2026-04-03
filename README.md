@@ -33,3 +33,18 @@ AURA is designed to support multiple real-world use cases, including:
 - Personal voice notes and idea capture  
 
 By transforming spoken information into structured knowledge, AURA aims to enhance productivity, knowledge management, and information accessibility.
+
+## Firebase Setup
+
+Firebase is initialized from `lib/firebase_options.dart`, and the real values
+are loaded from your local `firebase.env.json` through Flutter
+`--dart-define-from-file`.
+
+1. Keep `firebase.env.json` as a local-only file
+2. Keep `android/app/google-services.json` and `ios/Runner/GoogleService-Info.plist`
+   as local-only files, or regenerate them with FlutterFire/Firebase Console
+3. Run the app with:
+
+```bash
+flutter run --dart-define-from-file=firebase.env.json
+```
