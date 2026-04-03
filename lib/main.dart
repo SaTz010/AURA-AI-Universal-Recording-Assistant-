@@ -17,10 +17,21 @@ import 'firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await _ensureFirebaseInitialized();
   runApp(const MyApp());
+}
+
+Future<FirebaseApp> _ensureFirebaseInitialized() async {
+  try {
+    return await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } on FirebaseException catch (error) {
+    if (error.code == 'duplicate-app') {
+      return Firebase.app();
+    }
+    rethrow;
+  }
 }
 
 class MyApp extends StatefulWidget {
