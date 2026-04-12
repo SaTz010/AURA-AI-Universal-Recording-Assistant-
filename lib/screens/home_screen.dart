@@ -173,6 +173,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
+    final homeHeaderBg = colors.surface.withValues(alpha: 0.5);
     final topInset = MediaQuery.of(context).padding.top;
 
     final currentUser = FirebaseAuth.instance.currentUser;
@@ -211,7 +212,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         horizontal: AuraSpacing.xl,
                         vertical: AuraSpacing.base,
                       ),
-                      color: colors.surface,
+                      color: homeHeaderBg,
                       child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
                   stream: userDocStream,
                   builder: (context, snapshot) {
@@ -482,7 +483,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         left: 0,
         right: 0,
         height: topInset,
-        child: Container(color: colors.surface),
+        child: Container(color: homeHeaderBg),
       ),
     ],
   ),
