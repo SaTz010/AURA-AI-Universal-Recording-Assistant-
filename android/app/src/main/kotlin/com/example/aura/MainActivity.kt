@@ -11,10 +11,11 @@ import android.content.Context
 import android.util.Log
 
 class MainActivity : FlutterActivity() {
-    private val CHANNEL = "com.aura.recording/audio"
+    private val channelName = "com.aura.recording/audio"
     private var mediaRecorder: MediaRecorder? = null
     private var recordingPath: String? = null
     private var isRecording = false
+    private var isPaused = false
     private var wakeLock: PowerManager.WakeLock? = null
     private var audioFocusRequest: Any? = null // AudioFocusRequest on API 26+
 
@@ -40,7 +41,7 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "startRecording" -> {
@@ -54,8 +55,17 @@ class MainActivity : FlutterActivity() {
                     "stopRecording" -> {
                         stopRecording(result)
                     }
+                    "pauseRecording" -> {
+                        pauseRecording(result)
+                    }
+                    "resumeRecording" -> {
+                        resumeRecording(result)
+                    }
                     "getDeviceAudioCapabilities" -> {
                         getDeviceAudioCapabilities(result)
+                    }
+                    "getAmplitude" -> {
+                        getAmplitude(result)
                     }
                     "setWakeLock" -> {
                         val enabled = call.argument<Boolean>("enabled") ?: false
@@ -123,6 +133,22 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun getAmplitude(result: MethodChannel.Result) {
+        if (!isRecording || isPaused || mediaRecorder == null) {
+            result.success(0.0)
+            return
+        }
+
+        try {
+            val rawAmplitude = mediaRecorder?.maxAmplitude ?: 0
+            val normalized = (rawAmplitude.toDouble() / 32767.0).coerceIn(0.0, 1.0)
+            result.success(normalized)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error reading amplitude", e)
+            result.success(0.0)
+        }
+    }
+
     private fun abandonAudioFocus() {
         val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -186,6 +212,7 @@ class MainActivity : FlutterActivity() {
 
             mediaRecorder = recorder
             isRecording = true
+            isPaused = false
 
             Log.i(TAG, "Recording started: $path " +
                     "(${SAMPLE_RATE}Hz, ${BIT_RATE / 1000}kbps, ${CHANNELS}ch)")
@@ -216,6 +243,7 @@ class MainActivity : FlutterActivity() {
             }
             mediaRecorder = null
             isRecording = false
+            isPaused = false
             abandonAudioFocus()
 
             // Validate output file
@@ -235,6 +263,58 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun pauseRecording(result: MethodChannel.Result) {
+        if (!isRecording || mediaRecorder == null) {
+            result.error("NOT_RECORDING", "No active recording to pause", null)
+            return
+        }
+
+        if (isPaused) {
+            result.success(null)
+            return
+        }
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+            result.error("UNSUPPORTED", "Pause is not supported on this Android version", null)
+            return
+        }
+
+        try {
+            mediaRecorder?.pause()
+            isPaused = true
+            result.success(null)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error pausing recording", e)
+            result.error("PAUSE_ERROR", e.message, null)
+        }
+    }
+
+    private fun resumeRecording(result: MethodChannel.Result) {
+        if (!isRecording || mediaRecorder == null) {
+            result.error("NOT_RECORDING", "No active recording to resume", null)
+            return
+        }
+
+        if (!isPaused) {
+            result.success(null)
+            return
+        }
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+            result.error("UNSUPPORTED", "Resume is not supported on this Android version", null)
+            return
+        }
+
+        try {
+            mediaRecorder?.resume()
+            isPaused = false
+            result.success(null)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error resuming recording", e)
+            result.error("RESUME_ERROR", e.message, null)
+        }
+    }
+
     /**
      * Safely releases MediaRecorder, swallowing exceptions.
      * Used in error paths and lifecycle callbacks where throwing is not useful.
@@ -244,6 +324,7 @@ class MainActivity : FlutterActivity() {
         try { mediaRecorder?.release() } catch (_: Exception) {}
         mediaRecorder = null
         isRecording = false
+        isPaused = false
         abandonAudioFocus()
     }
 

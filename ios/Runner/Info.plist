@@ -64,5 +64,7 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>AURA needs microphone access to record and visualize live audio.</string>
 </dict>
 </plist>
