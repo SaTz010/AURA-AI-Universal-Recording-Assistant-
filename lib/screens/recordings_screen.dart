@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -48,6 +49,8 @@ class RecordingsScreen extends StatefulWidget {
 class _RecordingsScreenState extends State<RecordingsScreen> with TickerProviderStateMixin {
   List<_RecordingEntry> _allRecordings = const [];
   bool _isLoading = true;
+
+  final Map<String, Duration?> _durationCache = {};
 
   _SortMode _sortMode = _SortMode.timeDesc;
   _SourceFilter _sourceFilter = _SourceFilter.all;
@@ -102,14 +105,6 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
     return _RecordingSource.uploaded;
   }
 
-  String _sourceLabel(_RecordingSource source) {
-    switch (source) {
-      case _RecordingSource.recorded:
-        return 'Recorded';
-      case _RecordingSource.uploaded:
-        return 'Uploaded';
-    }
-  }
 
   List<_RecordingEntry> _visibleRecordings() {
     final filtered = _allRecordings.where((r) {
@@ -174,10 +169,77 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
         _allRecordings = entries;
         _isLoading = false;
       });
+
+      final newestFirst = [...entries]..sort((a, b) => b.modified.compareTo(a.modified));
+      unawaited(_prefetchDurations(newestFirst.take(25)));
     } catch (_) {
       if (!mounted) return;
       setState(() => _isLoading = false);
     }
+  }
+
+  String _displayTitle(String fileName) {
+    final dot = fileName.lastIndexOf('.');
+    if (dot <= 0) return fileName;
+    return fileName.substring(0, dot);
+  }
+
+  String _formatRelativeDateTime(DateTime dt) {
+    final now = DateTime.now();
+    final isSameDay = now.year == dt.year && now.month == dt.month && now.day == dt.day;
+
+    final hour12 = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+    final time = '$hour12:$minute $ampm';
+
+    if (isSameDay) return 'Today, $time';
+
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+
+    final month = months[(dt.month - 1).clamp(0, 11)];
+    return '$month ${dt.day}, $time';
+  }
+
+  Future<void> _prefetchDurations(Iterable<_RecordingEntry> entries) async {
+    final probe = AudioPlayer();
+    try {
+      for (final entry in entries) {
+        final path = entry.file.path;
+        if (_durationCache.containsKey(path)) continue;
+
+        try {
+          final d = await probe.setFilePath(path);
+          if (d != null) {
+            _durationCache[path] = d;
+          } else {
+            _durationCache[path] = null;
+          }
+        } catch (_) {
+          _durationCache[path] = null;
+        }
+
+        if (!mounted) return;
+      }
+    } finally {
+      await probe.dispose();
+    }
+
+    if (!mounted) return;
+    setState(() {});
   }
 
   Future<void> _prepareFile(String filePath) async {
@@ -185,10 +247,12 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
 
     try {
       setState(() => _isPreparing = true);
-      await _audioPlayer.setFilePath(filePath);
+      final loadedDuration = await _audioPlayer.setFilePath(filePath);
       if (!mounted) return;
       setState(() {
         _loadedFilePath = filePath;
+        _duration = loadedDuration ?? Duration.zero;
+        _durationCache[filePath] = loadedDuration;
         _isPreparing = false;
         _position = Duration.zero;
       });
@@ -252,11 +316,13 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
       }
 
       setState(() => _isPreparing = true);
-      await _audioPlayer.setFilePath(filePath);
+      final loadedDuration = await _audioPlayer.setFilePath(filePath);
       await _audioPlayer.play();
       if (!mounted) return;
       setState(() {
         _loadedFilePath = filePath;
+        _duration = loadedDuration ?? Duration.zero;
+        _durationCache[filePath] = loadedDuration;
         _playingFilePath = filePath;
         _expandedFilePath = filePath;
         _isPreparing = false;
@@ -272,8 +338,14 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
 
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
+
+    final hours = duration.inHours;
     final minutes = twoDigits(duration.inMinutes.remainder(60));
     final seconds = twoDigits(duration.inSeconds.remainder(60));
+
+    if (hours > 0) {
+      return '$hours:$minutes:$seconds';
+    }
     return '$minutes:$seconds';
   }
 
@@ -616,21 +688,26 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
       itemBuilder: (context, index) {
         final entry = recordings[index];
         final file = entry.file;
-        final fileName = entry.fileName;
-        final fileSize = entry.sizeBytes;
+        final title = _displayTitle(entry.fileName);
         final lastModified = entry.modified;
-        final formattedDate =
-            '${lastModified.year}-${lastModified.month.toString().padLeft(2, '0')}-${lastModified.day.toString().padLeft(2, '0')} '
-            '${lastModified.hour.toString().padLeft(2, '0')}:${lastModified.minute.toString().padLeft(2, '0')}';
+
         final isExpanded = _expandedFilePath == file.path;
         final isActive = _loadedFilePath == file.path;
         final isPlaying = isActive && _audioPlayer.playing;
 
+        final cached = _durationCache[file.path];
+        final displayDuration = (isActive && _duration.inMilliseconds > 0)
+            ? _duration
+            : (cached ?? Duration.zero);
+        final durationText = displayDuration.inMilliseconds > 0
+            ? _formatDuration(displayDuration)
+            : '--:--';
+
         return Container(
           decoration: BoxDecoration(
-            color: colors.surface,
+            color: colors.surfaceElevated,
             borderRadius: AuraRadius.mdBr,
-            border: Border.all(color: colors.border),
+            border: Border.all(color: colors.border.withValues(alpha: 0.35)),
             boxShadow: AuraElevation.low(Colors.black),
           ),
           child: Column(
@@ -645,20 +722,36 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
                     _toggleExpanded(file.path);
                   },
                   child: Padding(
-                    padding: const EdgeInsets.all(AuraSpacing.md),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AuraSpacing.lg,
+                      vertical: AuraSpacing.md,
+                    ),
+                    child: Row(
                       children: [
-                        Text(
-                          fileName,
-                          style: AuraTypography.bodyLarge(colors.textPrimary),
-                          overflow: TextOverflow.ellipsis,
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                style: AuraTypography.bodyLarge(colors.textPrimary).copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                _formatRelativeDateTime(lastModified),
+                                style: AuraTypography.caption(colors.textSecondary),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
                         ),
-                        const SizedBox(height: AuraSpacing.xxs),
+                        const SizedBox(width: AuraSpacing.md),
                         Text(
-                          '$formattedDate  •  ${_sourceLabel(entry.source)}  •  ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB',
+                          durationText,
                           style: AuraTypography.caption(colors.textSecondary),
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ],
                     ),
@@ -685,8 +778,12 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
                             _seekRelative(file.path, const Duration(seconds: -15)),
                         onSkipForward: () =>
                             _seekRelative(file.path, const Duration(seconds: 15)),
-                        onDelete: () =>
-                            _showDeleteDialog(context, fileName, file.path, colors),
+                        onDelete: () => _showDeleteDialog(
+                          context,
+                          entry.fileName,
+                          file.path,
+                          colors,
+                        ),
                       )
                     : const SizedBox.shrink(),
               ),
