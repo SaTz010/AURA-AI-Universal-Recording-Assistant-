@@ -24,8 +24,6 @@ class DashboardLowerContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = AuraThemeColors.of(context);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -46,13 +44,7 @@ class DashboardLowerContent extends StatelessWidget {
           onSummarize: onSummarize,
         ),
         const SizedBox(height: AuraSpacing.xl),
-        _StorageAndStatsCard(
-          title: 'Weekly Recording',
-          value: '2.5 Hours',
-          progressValue: 0.62,
-          progressLabel: 'Storage used',
-          accent: colors.accent,
-        ),
+        const _TotalRecordedCard(),
       ],
     );
   }
@@ -542,24 +534,139 @@ class _ActionCard extends StatelessWidget {
   }
 }
 
-class _StorageAndStatsCard extends StatelessWidget {
-  const _StorageAndStatsCard({
-    required this.title,
-    required this.value,
-    required this.progressValue,
-    required this.progressLabel,
-    required this.accent,
-  });
+class _TotalRecordedCard extends StatefulWidget {
+  const _TotalRecordedCard();
 
-  final String title;
-  final String value;
-  final double progressValue;
-  final String progressLabel;
-  final Color accent;
+  @override
+  State<_TotalRecordedCard> createState() => _TotalRecordedCardState();
+}
+
+class _TotalRecordedCardState extends State<_TotalRecordedCard> {
+  bool _isLoading = true;
+  int _recordingsCount = 0;
+  int _durationsResolved = 0;
+  Duration _totalRecorded = Duration.zero;
+  DateTime? _latestTimestamp;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final entities = dir.listSync();
+      final files = entities
+          .where((e) => e.path.toLowerCase().endsWith('.m4a'))
+          .map((e) => File(e.path))
+          .toList();
+
+      final audioPlayer = AudioPlayer();
+      var total = Duration.zero;
+      var resolved = 0;
+      DateTime? latest;
+
+      try {
+        for (final file in files) {
+          final modified = file.lastModifiedSync();
+          if (latest == null || modified.isAfter(latest)) {
+            latest = modified;
+          }
+
+          try {
+            final d = await audioPlayer.setFilePath(file.path);
+            if (d != null) {
+              total += d;
+              resolved++;
+            }
+          } catch (_) {
+            // ignore individual decode errors
+          }
+        }
+      } finally {
+        await audioPlayer.dispose();
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _recordingsCount = files.length;
+        _durationsResolved = resolved;
+        _totalRecorded = total;
+        _latestTimestamp = latest;
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _recordingsCount = 0;
+        _durationsResolved = 0;
+        _totalRecorded = Duration.zero;
+        _latestTimestamp = null;
+        _isLoading = false;
+      });
+    }
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  String _formatRelativeDateTime(DateTime dt, DateTime now) {
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+
+    final dayLabel = _isSameDay(dt, today)
+        ? 'Today'
+        : _isSameDay(dt, yesterday)
+            ? 'Yesterday'
+            : now.difference(dt).inDays < 7
+                ? const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][dt.weekday - 1]
+                : '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+
+    final hour12 = (dt.hour % 12) == 0 ? 12 : (dt.hour % 12);
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final suffix = dt.hour >= 12 ? 'PM' : 'AM';
+
+    return '$dayLabel, $hour12:$minute $suffix';
+  }
+
+  String _formatTotal(Duration d) {
+    if (d == Duration.zero) return '0m';
+
+    final totalMinutes = d.inMinutes;
+    if (totalMinutes < 60) {
+      return '${totalMinutes}m';
+    }
+
+    final hours = d.inHours;
+    final minutes = totalMinutes % 60;
+    return '${hours}h ${minutes}m';
+  }
 
   @override
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
+
+    final title = Text(
+      'Total Recorded',
+      style: AuraTypography.bodyMedium(colors.textSecondary),
+      overflow: TextOverflow.ellipsis,
+    );
+
+    final valueText = _isLoading
+        ? '—'
+        : (_durationsResolved == 0 && _recordingsCount > 0)
+            ? '--'
+            : _formatTotal(_totalRecorded);
+
+    final meta = _isLoading
+        ? 'Calculating…'
+        : _recordingsCount == 0
+            ? 'No recordings yet'
+            : '$_recordingsCount recordings'
+                '${_latestTimestamp == null ? '' : ' • Last: ${_formatRelativeDateTime(_latestTimestamp!, DateTime.now())}'}';
 
     return Container(
       decoration: BoxDecoration(
@@ -575,35 +682,22 @@ class _StorageAndStatsCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: AuraTypography.bodyMedium(colors.textSecondary),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
+                Expanded(child: title),
+                Icon(Icons.timer_rounded, color: colors.accent, size: 18),
+                const SizedBox(width: AuraSpacing.xs),
                 Text(
-                  value,
+                  valueText,
                   style: AuraTypography.titleMedium(colors.textPrimary).copyWith(
                     fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: AuraSpacing.md),
-            ClipRRect(
-              borderRadius: AuraRadius.fullBr,
-              child: LinearProgressIndicator(
-                minHeight: 6,
-                value: progressValue.clamp(0.0, 1.0),
-                backgroundColor: colors.surfaceElevated,
-                valueColor: AlwaysStoppedAnimation<Color>(accent),
-              ),
-            ),
             const SizedBox(height: AuraSpacing.xs),
             Text(
-              progressLabel,
+              meta,
               style: AuraTypography.caption(colors.textTertiary),
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
