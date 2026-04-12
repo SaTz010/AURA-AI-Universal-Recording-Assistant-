@@ -447,6 +447,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         ),
                       ),
                     ),
+                    const SizedBox(height: AuraSpacing.lg),
                     DashboardLowerContent(
                       onUploadFile: _showUploadSheet,
                       onRecordMeeting: _openRecordingSession,
