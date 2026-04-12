@@ -132,7 +132,9 @@ class _RecentRecordingPreviewData {
   final String filePath;
   final String title;
   final String subtitle;
-  final String durationText;
+
+  // Nullable to avoid hot-reload state issues when this model changes.
+  final String? durationText;
 }
 
 class _RecentRecordingsPreview extends StatefulWidget {
@@ -624,7 +626,7 @@ class _RecentExpandableTile extends StatelessWidget {
                     ),
                     const SizedBox(width: AuraSpacing.md),
                     Text(
-                      data.durationText,
+                      data.durationText ?? '--:--',
                       style: AuraTypography.caption(colors.textSecondary).copyWith(
                         fontFeatures: const [FontFeature.tabularFigures()],
                       ),
