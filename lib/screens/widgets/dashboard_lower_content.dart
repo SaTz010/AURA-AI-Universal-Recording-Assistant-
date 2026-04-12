@@ -1,5 +1,9 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../theme/aura_theme.dart';
 import '../../theme/aura_tokens.dart';
@@ -7,18 +11,16 @@ import '../../theme/aura_tokens.dart';
 class DashboardLowerContent extends StatelessWidget {
   const DashboardLowerContent({
     super.key,
-    this.onUploadFile,
-    this.onRecordMeeting,
-    this.onVoiceMemo,
-    this.onCloudImport,
-    this.onRecentTapped,
+    this.onUploadAudio,
+    this.onSummarize,
+    this.onViewAllRecent,
+    this.onRecentFileTap,
   });
 
-  final VoidCallback? onUploadFile;
-  final VoidCallback? onRecordMeeting;
-  final VoidCallback? onVoiceMemo;
-  final VoidCallback? onCloudImport;
-  final ValueChanged<String>? onRecentTapped;
+  final VoidCallback? onUploadAudio;
+  final VoidCallback? onSummarize;
+  final VoidCallback? onViewAllRecent;
+  final ValueChanged<String>? onRecentFileTap;
 
   @override
   Widget build(BuildContext context) {
@@ -27,37 +29,21 @@ class DashboardLowerContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _SectionHeader(title: 'Recent'),
+        _SectionHeaderRow(
+          title: 'Recent',
+          actionLabel: 'View all',
+          onActionTap: onViewAllRecent,
+        ),
         const SizedBox(height: AuraSpacing.sm),
-        _RecentRecordingsList(
-          items: const [
-            _RecentRecordingItemData(
-              title: 'Product Team Sync',
-              subtitle: 'Today, 10:00 AM',
-              duration: '15:42',
-              icon: Icons.play_circle_filled_rounded,
-            ),
-            _RecentRecordingItemData(
-              title: 'Interview Notes',
-              subtitle: 'Yesterday, 5:12 PM',
-              duration: '08:07',
-              icon: Icons.graphic_eq_rounded,
-            ),
-            _RecentRecordingItemData(
-              title: 'Voice Memo – Ideas',
-              subtitle: 'Mon, 9:20 AM',
-              duration: '03:18',
-              icon: Icons.multitrack_audio_rounded,
-            ),
-          ],
-          onTap: onRecentTapped,
+        _RecentRecordingsPreview(
+          onFileTap: onRecentFileTap,
         ),
         const SizedBox(height: AuraSpacing.xl),
         const _SectionHeader(title: 'Quick Actions'),
         const SizedBox(height: AuraSpacing.sm),
         _QuickActionsGrid(
-          onUploadAudio: onUploadFile,
-          onTbdAction: null,
+          onUploadAudio: onUploadAudio,
+          onSummarize: onSummarize,
         ),
         const SizedBox(height: AuraSpacing.xl),
         _StorageAndStatsCard(
@@ -89,39 +75,290 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-class _RecentRecordingItemData {
-  const _RecentRecordingItemData({
+class _SectionHeaderRow extends StatelessWidget {
+  const _SectionHeaderRow({
+    required this.title,
+    required this.actionLabel,
+    this.onActionTap,
+  });
+
+  final String title;
+  final String actionLabel;
+  final VoidCallback? onActionTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AuraThemeColors.of(context);
+
+    return Row(
+      children: [
+        Expanded(child: _SectionHeader(title: title)),
+        Material(
+          color: Colors.transparent,
+          borderRadius: AuraRadius.fullBr,
+          child: InkWell(
+            borderRadius: AuraRadius.fullBr,
+            onTap: onActionTap == null
+                ? null
+                : () {
+                    HapticFeedback.lightImpact();
+                    onActionTap?.call();
+                  },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AuraSpacing.sm,
+                vertical: AuraSpacing.xs,
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    actionLabel,
+                    style: AuraTypography.labelSmall(colors.accent),
+                  ),
+                  const SizedBox(width: AuraSpacing.xxs),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 18,
+                    color: colors.accent,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RecentRecordingPreviewData {
+  const _RecentRecordingPreviewData({
+    required this.filePath,
     required this.title,
     required this.subtitle,
     required this.duration,
     required this.icon,
   });
 
+  final String filePath;
   final String title;
   final String subtitle;
   final String duration;
   final IconData icon;
 }
 
-class _RecentRecordingsList extends StatelessWidget {
-  const _RecentRecordingsList({required this.items, this.onTap});
+class _RecentRecordingsPreview extends StatefulWidget {
+  const _RecentRecordingsPreview({this.onFileTap});
 
-  final List<_RecentRecordingItemData> items;
-  final ValueChanged<String>? onTap;
+  final ValueChanged<String>? onFileTap;
+
+  @override
+  State<_RecentRecordingsPreview> createState() => _RecentRecordingsPreviewState();
+}
+
+class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
+  bool _isLoading = true;
+  List<_RecentRecordingPreviewData> _items = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final entities = dir.listSync();
+      final recordingFiles = entities.where((e) => e.path.toLowerCase().endsWith('.m4a')).toList();
+      recordingFiles.sort(
+        (a, b) => File(b.path).lastModifiedSync().compareTo(File(a.path).lastModifiedSync()),
+      );
+
+      final previewFiles = recordingFiles.take(3).map((e) => File(e.path)).toList();
+      final now = DateTime.now();
+
+      final items = <_RecentRecordingPreviewData>[];
+      final audioPlayer = AudioPlayer();
+      try {
+        for (final file in previewFiles) {
+          final fileName = file.path.split(RegExp(r'[\\/]')).last;
+          final title = _stripExtension(fileName);
+          final modified = file.lastModifiedSync();
+
+          Duration? duration;
+          try {
+            duration = await audioPlayer.setFilePath(file.path);
+          } catch (_) {
+            duration = null;
+          }
+
+          items.add(
+            _RecentRecordingPreviewData(
+              filePath: file.path,
+              title: title,
+              subtitle: _formatRelativeDateTime(modified, now),
+              duration: _formatDuration(duration),
+              icon: Icons.play_circle_filled_rounded,
+            ),
+          );
+        }
+      } finally {
+        await audioPlayer.dispose();
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _items = items;
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _items = const [];
+        _isLoading = false;
+      });
+    }
+  }
+
+  String _stripExtension(String fileName) {
+    final dot = fileName.lastIndexOf('.');
+    return dot == -1 ? fileName : fileName.substring(0, dot);
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  String _formatRelativeDateTime(DateTime dt, DateTime now) {
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+
+    final dayLabel = _isSameDay(dt, today)
+        ? 'Today'
+        : _isSameDay(dt, yesterday)
+            ? 'Yesterday'
+            : now.difference(dt).inDays < 7
+                ? const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][dt.weekday - 1]
+                : '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+
+    final hour12 = (dt.hour % 12) == 0 ? 12 : (dt.hour % 12);
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final suffix = dt.hour >= 12 ? 'PM' : 'AM';
+
+    return '$dayLabel, $hour12:$minute $suffix';
+  }
+
+  String _formatDuration(Duration? duration) {
+    if (duration == null) return '--:--';
+
+    final totalSeconds = duration.inSeconds;
+    final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
+    final totalMinutes = duration.inMinutes;
+
+    if (totalMinutes >= 60) {
+      final hours = duration.inHours;
+      final minutes = (totalMinutes % 60).toString().padLeft(2, '0');
+      return '$hours:$minutes:$seconds';
+    }
+
+    final minutes = totalMinutes.toString().padLeft(2, '0');
+    return '$minutes:$seconds';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final colors = AuraThemeColors.of(context);
+
+    if (_isLoading) {
+      return Container(
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: AuraRadius.mdBr,
+          border: Border.all(color: colors.border),
+          boxShadow: AuraElevation.low(Colors.black),
+        ),
+        padding: const EdgeInsets.all(AuraSpacing.md),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: colors.accent,
+              ),
+            ),
+            const SizedBox(width: AuraSpacing.md),
+            Expanded(
+              child: Text(
+                'Loading recent recordings…',
+                style: AuraTypography.bodyMedium(colors.textSecondary),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_items.isEmpty) {
+      return Container(
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: AuraRadius.mdBr,
+          border: Border.all(color: colors.border),
+          boxShadow: AuraElevation.low(Colors.black),
+        ),
+        padding: const EdgeInsets.all(AuraSpacing.md),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: colors.surfaceElevated,
+                border: Border.all(color: colors.border),
+              ),
+              child: Icon(Icons.mic_rounded, color: colors.iconDefault, size: 22),
+            ),
+            const SizedBox(width: AuraSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'No recordings yet',
+                    style: AuraTypography.bodyLarge(colors.textPrimary).copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: AuraSpacing.xxs),
+                  Text(
+                    'Start recording to see your latest files here.',
+                    style: AuraTypography.caption(colors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Column(
       children: [
-        for (int i = 0; i < items.length; i++) ...[
+        for (int i = 0; i < _items.length; i++) ...[
           _RecentRecordingTile(
-            data: items[i],
-            onTap: () {
-              HapticFeedback.lightImpact();
-              onTap?.call(items[i].title);
-            },
+            data: _items[i],
+            onTap: widget.onFileTap == null
+                ? null
+                : () {
+                    HapticFeedback.lightImpact();
+                    widget.onFileTap?.call(_items[i].filePath);
+                  },
           ),
-          if (i != items.length - 1) const SizedBox(height: AuraSpacing.sm),
+          if (i != _items.length - 1) const SizedBox(height: AuraSpacing.sm),
         ],
       ],
     );
@@ -131,7 +368,7 @@ class _RecentRecordingsList extends StatelessWidget {
 class _RecentRecordingTile extends StatelessWidget {
   const _RecentRecordingTile({required this.data, this.onTap});
 
-  final _RecentRecordingItemData data;
+  final _RecentRecordingPreviewData data;
   final VoidCallback? onTap;
 
   @override
@@ -204,11 +441,11 @@ class _RecentRecordingTile extends StatelessWidget {
 class _QuickActionsGrid extends StatelessWidget {
   const _QuickActionsGrid({
     this.onUploadAudio,
-    this.onTbdAction,
+    this.onSummarize,
   });
 
   final VoidCallback? onUploadAudio;
-  final VoidCallback? onTbdAction;
+  final VoidCallback? onSummarize;
 
   @override
   Widget build(BuildContext context) {
@@ -229,7 +466,7 @@ class _QuickActionsGrid extends StatelessWidget {
         _ActionCard(
           icon: Icons.summarize_rounded,
           label: 'Summarize',
-          onTap: onTbdAction,
+          onTap: onSummarize,
           dense: true,
         ),
       ],
@@ -266,10 +503,12 @@ class _ActionCard extends StatelessWidget {
         borderRadius: AuraRadius.mdBr,
         child: InkWell(
           borderRadius: AuraRadius.mdBr,
-          onTap: () {
-            HapticFeedback.lightImpact();
-            onTap?.call();
-          },
+          onTap: onTap == null
+              ? null
+              : () {
+                  HapticFeedback.lightImpact();
+                  onTap?.call();
+                },
           child: Padding(
             padding: EdgeInsets.all(dense ? AuraSpacing.sm : AuraSpacing.md),
             child: Row(

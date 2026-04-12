@@ -451,15 +451,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     ),
                     const SizedBox(height: AuraSpacing.lg),
                     DashboardLowerContent(
-                      onUploadFile: _showUploadSheet,
-                      onRecordMeeting: _openRecordingSession,
-                      onVoiceMemo: _openRecordingSession,
-                      onCloudImport: _showUploadSheet,
-                      onRecentTapped: (title) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Open: $title (not implemented)')),
-                        );
-                      },
+                      onUploadAudio: _showUploadSheet,
+                      onSummarize: () => _onBottomNavTapped(3),
+                      onViewAllRecent: () => _onBottomNavTapped(1),
+                      onRecentFileTap: (_) => _onBottomNavTapped(1),
                     ),
                   ],
                 ),
