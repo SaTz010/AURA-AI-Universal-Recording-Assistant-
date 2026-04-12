@@ -784,6 +784,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
                           file.path,
                           colors,
                         ),
+                        onSummarize: () {},
                       )
                     : const SizedBox.shrink(),
               ),
@@ -844,6 +845,7 @@ class _InlinePlayer extends StatelessWidget {
     required this.onSkipBack,
     required this.onSkipForward,
     required this.onDelete,
+    this.onSummarize,
   });
 
   final AuraThemeColors colors;
@@ -859,6 +861,7 @@ class _InlinePlayer extends StatelessWidget {
   final VoidCallback onSkipBack;
   final VoidCallback onSkipForward;
   final VoidCallback onDelete;
+  final VoidCallback? onSummarize;
 
   @override
   Widget build(BuildContext context) {
@@ -939,7 +942,12 @@ class _InlinePlayer extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(Icons.graphic_eq_rounded, color: colors.accent, size: 28),
+              IconButton(
+                onPressed: onDelete,
+                icon: Icon(Icons.delete_outline_rounded, color: colors.accent),
+                iconSize: 30,
+                tooltip: 'Delete',
+              ),
               IconButton(
                 onPressed: canSeek ? onSkipBack : null,
                 icon: skipText('-15'),
@@ -960,10 +968,10 @@ class _InlinePlayer extends StatelessWidget {
                 tooltip: 'Forward 15s',
               ),
               IconButton(
-                onPressed: onDelete,
-                icon: Icon(Icons.delete_outline_rounded, color: colors.accent),
-                iconSize: 30,
-                tooltip: 'Delete',
+                onPressed: onSummarize ?? () {},
+                icon: Icon(Icons.auto_awesome_rounded, color: colors.accent),
+                iconSize: 28,
+                tooltip: 'Summarize (coming soon)',
               ),
             ],
           ),

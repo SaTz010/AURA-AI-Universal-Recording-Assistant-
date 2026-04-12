@@ -689,7 +689,12 @@ class _RecentExpandableTile extends StatelessWidget {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Icon(Icons.graphic_eq_rounded, color: colors.accent, size: 28),
+                            IconButton(
+                              onPressed: onDelete,
+                              icon: Icon(Icons.delete_outline_rounded, color: colors.accent),
+                              iconSize: 30,
+                              tooltip: 'Delete',
+                            ),
                             IconButton(
                               onPressed: canSeek ? onSkipBack : null,
                               icon: skipText('-15'),
@@ -710,10 +715,10 @@ class _RecentExpandableTile extends StatelessWidget {
                               tooltip: 'Forward 15s',
                             ),
                             IconButton(
-                              onPressed: onDelete,
-                              icon: Icon(Icons.delete_outline_rounded, color: colors.accent),
-                              iconSize: 30,
-                              tooltip: 'Delete',
+                              onPressed: () {},
+                              icon: Icon(Icons.auto_awesome_rounded, color: colors.accent),
+                              iconSize: 28,
+                              tooltip: 'Summarize (coming soon)',
                             ),
                           ],
                         ),
