@@ -871,26 +871,16 @@ class _InlinePlayer extends StatelessWidget {
     final remainingRaw = duration - position;
     final remaining = remainingRaw.isNegative ? Duration.zero : remainingRaw;
 
-    const skipIconSize = 30.0;
-
-    final skipLabelStyle = AuraTypography.caption(colors.iconDefault).copyWith(
-      fontSize: 10,
+    final skipTextStyle = AuraTypography.bodyMedium(colors.iconDefault).copyWith(
       fontWeight: FontWeight.w800,
-      height: 1,
+      letterSpacing: 0.2,
     );
 
-    Widget skipIcon(IconData baseIcon) {
-      return SizedBox.square(
-        dimension: skipIconSize,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Icon(baseIcon, size: skipIconSize, color: colors.iconDefault),
-            Positioned(
-              bottom: skipIconSize * 0.20,
-              child: Text('15', style: skipLabelStyle),
-            ),
-          ],
+    Widget skipText(String label) {
+      return SizedBox(
+        width: 34,
+        child: Center(
+          child: Text(label, style: skipTextStyle),
         ),
       );
     }
@@ -952,8 +942,7 @@ class _InlinePlayer extends StatelessWidget {
               Icon(Icons.graphic_eq_rounded, color: colors.accent, size: 28),
               IconButton(
                 onPressed: canSeek ? onSkipBack : null,
-                icon: skipIcon(Icons.replay_rounded),
-                iconSize: 30,
+                icon: skipText('-15'),
                 tooltip: 'Back 15s',
               ),
               IconButton(
@@ -967,8 +956,7 @@ class _InlinePlayer extends StatelessWidget {
               ),
               IconButton(
                 onPressed: canSeek ? onSkipForward : null,
-                icon: skipIcon(Icons.forward_rounded),
-                iconSize: 30,
+                icon: skipText('+15'),
                 tooltip: 'Forward 15s',
               ),
               IconButton(
