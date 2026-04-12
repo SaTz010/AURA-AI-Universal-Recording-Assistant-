@@ -173,7 +173,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
-    final homeHeaderBg = colors.surface;
+    final homeHeaderBg = colors.surface.withValues(alpha: 0.5);
     final topInset = MediaQuery.of(context).padding.top;
 
     final currentUser = FirebaseAuth.instance.currentUser;
@@ -208,18 +208,31 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   children: [
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AuraSpacing.xl,
-                        vertical: AuraSpacing.lg,
-                      ),
-                      clipBehavior: Clip.antiAlias,
                       decoration: BoxDecoration(
                         color: homeHeaderBg,
                         borderRadius: const BorderRadius.vertical(
                           bottom: Radius.circular(AuraRadius.lg),
                         ),
+                        boxShadow: isDarkTheme
+                            ? null
+                            : [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.10),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
                       ),
-                      child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.vertical(
+                          bottom: Radius.circular(AuraRadius.lg),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AuraSpacing.xl,
+                            vertical: AuraSpacing.lg,
+                          ),
+                          child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
                   stream: userDocStream,
                   builder: (context, snapshot) {
                     final data = snapshot.data?.data();
@@ -319,8 +332,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     );
                   },
                 ),
-              ),
-              Padding(
+                          ),
+                        ),
+                      ),
+                      Padding(
                 padding: const EdgeInsets.fromLTRB(
                   0,
                   AuraSpacing.huge,
