@@ -45,7 +45,7 @@ class RecordingsScreen extends StatefulWidget {
   State<RecordingsScreen> createState() => _RecordingsScreenState();
 }
 
-class _RecordingsScreenState extends State<RecordingsScreen> {
+class _RecordingsScreenState extends State<RecordingsScreen> with TickerProviderStateMixin {
   List<_RecordingEntry> _allRecordings = const [];
   bool _isLoading = true;
 
@@ -54,6 +54,10 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
 
   late final AudioPlayer _audioPlayer;
   String? _playingFilePath;
+  String? _loadedFilePath;
+  String? _expandedFilePath;
+  bool _isPreparing = false;
+
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
 
@@ -176,16 +180,76 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
     }
   }
 
+  Future<void> _prepareFile(String filePath) async {
+    if (_loadedFilePath == filePath) return;
+
+    try {
+      setState(() => _isPreparing = true);
+      await _audioPlayer.setFilePath(filePath);
+      if (!mounted) return;
+      setState(() {
+        _loadedFilePath = filePath;
+        _isPreparing = false;
+        _position = Duration.zero;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isPreparing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading audio: $e')),
+      );
+    }
+  }
+
+  Future<void> _toggleExpanded(String filePath) async {
+    if (_expandedFilePath == filePath) {
+      setState(() => _expandedFilePath = null);
+      return;
+    }
+
+    setState(() => _expandedFilePath = filePath);
+    await _prepareFile(filePath);
+  }
+
+  Future<void> _seekRelative(String filePath, Duration delta) async {
+    if (_loadedFilePath != filePath) return;
+
+    final total = _duration;
+    if (total == Duration.zero) return;
+
+    final raw = _position + delta;
+    final clamped = raw < Duration.zero
+        ? Duration.zero
+        : (raw > total ? total : raw);
+
+    await _audioPlayer.seek(clamped);
+  }
+
   Future<void> _playRecording(String filePath) async {
     try {
-      if (_playingFilePath == filePath && _audioPlayer.playing) {
-        await _audioPlayer.pause();
-        setState(() => _playingFilePath = null);
-      } else {
-        await _audioPlayer.setFilePath(filePath);
-        await _audioPlayer.play();
-        setState(() => _playingFilePath = filePath);
+      final isSameFile = _loadedFilePath == filePath;
+
+      if (isSameFile) {
+        if (_audioPlayer.playing) {
+          await _audioPlayer.pause();
+          if (!mounted) return;
+          setState(() => _playingFilePath = null);
+        } else {
+          await _audioPlayer.play();
+          if (!mounted) return;
+          setState(() => _playingFilePath = filePath);
+        }
+        return;
       }
+
+      await _audioPlayer.setFilePath(filePath);
+      await _audioPlayer.play();
+      if (!mounted) return;
+      setState(() {
+        _loadedFilePath = filePath;
+        _playingFilePath = filePath;
+        _expandedFilePath = filePath;
+      });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -419,7 +483,9 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
         onTap: _onBottomNavTapped,
       ),
       appBar: AppBar(
-        backgroundColor: colors.surface,
+        backgroundColor: colors.background,
+        surfaceTintColor: Colors.transparent,
+        scrolledUnderElevation: 0,
         elevation: 0,
         leading: _ScreenBackButton(),
         title: Text('Recordings', style: AuraTypography.titleLarge(colors.textPrimary)),
@@ -544,7 +610,9 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
         final formattedDate =
             '${lastModified.year}-${lastModified.month.toString().padLeft(2, '0')}-${lastModified.day.toString().padLeft(2, '0')} '
             '${lastModified.hour.toString().padLeft(2, '0')}:${lastModified.minute.toString().padLeft(2, '0')}';
-        final isPlaying = _playingFilePath == file.path;
+        final isExpanded = _expandedFilePath == file.path;
+        final isActive = _loadedFilePath == file.path;
+        final isPlaying = isActive && _audioPlayer.playing;
 
         return Container(
           decoration: BoxDecoration(
@@ -553,12 +621,12 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
             border: Border.all(color: colors.border),
             boxShadow: AuraElevation.low(Colors.black),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(AuraSpacing.md),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(AuraSpacing.md),
+                child: Row(
                   children: [
                     Material(
                       color: Colors.transparent,
@@ -577,67 +645,104 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                     ),
                     const SizedBox(width: AuraSpacing.md),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            fileName,
-                            style: AuraTypography.bodyLarge(colors.textPrimary),
-                            overflow: TextOverflow.ellipsis,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: AuraRadius.smBr,
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            _toggleExpanded(file.path);
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: AuraSpacing.xxs),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  fileName,
+                                  style: AuraTypography.bodyLarge(colors.textPrimary),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: AuraSpacing.xxs),
+                                Text(
+                                  '$formattedDate  •  ${_sourceLabel(entry.source)}  •  ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB',
+                                  style: AuraTypography.caption(colors.textSecondary),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
                           ),
-                          const SizedBox(height: AuraSpacing.xxs),
-                          Text(
-                            '$formattedDate  •  ${_sourceLabel(entry.source)}  •  ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB',
-                            style: AuraTypography.caption(colors.textSecondary),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
+                        ),
                       ),
                     ),
+                    if (!isExpanded)
+                      Material(
+                        color: Colors.transparent,
+                        borderRadius: AuraRadius.fullBr,
+                        child: InkWell(
+                          borderRadius: AuraRadius.fullBr,
+                          onTap: () =>
+                              _showDeleteDialog(context, fileName, file.path, colors),
+                          child: Padding(
+                            padding: const EdgeInsets.all(AuraSpacing.sm),
+                            child: Icon(
+                              Icons.delete_outline_rounded,
+                              color: colors.textTertiary,
+                              size: 22,
+                            ),
+                          ),
+                        ),
+                      ),
                     Material(
                       color: Colors.transparent,
                       borderRadius: AuraRadius.fullBr,
                       child: InkWell(
                         borderRadius: AuraRadius.fullBr,
-                        onTap: () => _showDeleteDialog(context, fileName, file.path, colors),
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          _toggleExpanded(file.path);
+                        },
                         child: Padding(
                           padding: const EdgeInsets.all(AuraSpacing.sm),
                           child: Icon(
-                            Icons.delete_outline_rounded,
+                            isExpanded
+                                ? Icons.keyboard_arrow_up_rounded
+                                : Icons.keyboard_arrow_down_rounded,
                             color: colors.textTertiary,
-                            size: 22,
+                            size: 24,
                           ),
                         ),
                       ),
                     ),
                   ],
                 ),
-                if (isPlaying) ...[
-                  const SizedBox(height: AuraSpacing.sm),
-                  Slider(
-                    value: _position.inSeconds.toDouble(),
-                    max: _duration.inSeconds.toDouble().clamp(1, double.infinity),
-                    onChanged: (v) => _audioPlayer.seek(Duration(seconds: v.toInt())),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: AuraSpacing.sm),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          _formatDuration(_position),
-                          style: AuraTypography.caption(colors.textSecondary),
-                        ),
-                        Text(
-                          _formatDuration(_duration),
-                          style: AuraTypography.caption(colors.textSecondary),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
+              ),
+              AnimatedSize(
+                duration: AuraMotion.fast,
+                curve: AuraMotion.standard,
+                child: isExpanded
+                    ? _InlinePlayer(
+                        colors: colors,
+                        filePath: file.path,
+                        isActive: isActive,
+                        isPlaying: isPlaying,
+                        isPreparing: _isPreparing && _loadedFilePath != file.path,
+                        position: isActive ? _position : Duration.zero,
+                        duration: isActive ? _duration : Duration.zero,
+                        formatDuration: _formatDuration,
+                        onPlayPause: () => _playRecording(file.path),
+                        onSeekToSeconds: (seconds) =>
+                            _audioPlayer.seek(Duration(seconds: seconds)),
+                        onSkipBack: () =>
+                            _seekRelative(file.path, const Duration(seconds: -15)),
+                        onSkipForward: () =>
+                            _seekRelative(file.path, const Duration(seconds: 15)),
+                        onDelete: () =>
+                            _showDeleteDialog(context, fileName, file.path, colors),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ],
           ),
         );
       },
@@ -672,6 +777,157 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                 fontWeight: FontWeight.w600,
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InlinePlayer extends StatelessWidget {
+  const _InlinePlayer({
+    required this.colors,
+    required this.filePath,
+    required this.isActive,
+    required this.isPlaying,
+    required this.isPreparing,
+    required this.position,
+    required this.duration,
+    required this.formatDuration,
+    required this.onPlayPause,
+    required this.onSeekToSeconds,
+    required this.onSkipBack,
+    required this.onSkipForward,
+    required this.onDelete,
+  });
+
+  final AuraThemeColors colors;
+  final String filePath;
+  final bool isActive;
+  final bool isPlaying;
+  final bool isPreparing;
+  final Duration position;
+  final Duration duration;
+  final String Function(Duration) formatDuration;
+  final VoidCallback onPlayPause;
+  final ValueChanged<int> onSeekToSeconds;
+  final VoidCallback onSkipBack;
+  final VoidCallback onSkipForward;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final canSeek = isActive && duration.inMilliseconds > 0;
+    final maxSeconds = duration.inSeconds <= 0 ? 1 : duration.inSeconds;
+    final valueSeconds = canSeek
+        ? position.inSeconds.clamp(0, maxSeconds).toDouble()
+        : 0.0;
+
+    final remainingRaw = duration - position;
+    final remaining = remainingRaw.isNegative ? Duration.zero : remainingRaw;
+
+    final skipLabelStyle = AuraTypography.caption(colors.iconDefault).copyWith(
+      fontSize: 10,
+      fontWeight: FontWeight.w700,
+      height: 1,
+    );
+
+    Widget skipIcon(IconData baseIcon) {
+      return Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(baseIcon, color: colors.iconDefault),
+          Positioned(
+            bottom: 6,
+            child: Text('15', style: skipLabelStyle),
+          ),
+        ],
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AuraSpacing.md,
+        0,
+        AuraSpacing.md,
+        AuraSpacing.md,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(height: 1, color: colors.border),
+          const SizedBox(height: AuraSpacing.sm),
+          if (isPreparing) ...[
+            LinearProgressIndicator(
+              minHeight: 2,
+              color: colors.accent,
+              backgroundColor: colors.border,
+            ),
+            const SizedBox(height: AuraSpacing.sm),
+          ],
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 3,
+              activeTrackColor: colors.accent,
+              inactiveTrackColor: colors.border,
+              thumbColor: colors.accent,
+              overlayColor: colors.accent.withValues(alpha: 0.12),
+            ),
+            child: Slider(
+              value: valueSeconds,
+              max: maxSeconds.toDouble(),
+              onChanged: canSeek ? (v) => onSeekToSeconds(v.toInt()) : null,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AuraSpacing.sm),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  formatDuration(canSeek ? position : Duration.zero),
+                  style: AuraTypography.caption(colors.textSecondary),
+                ),
+                Text(
+                  canSeek ? '-${formatDuration(remaining)}' : '--:--',
+                  style: AuraTypography.caption(colors.textSecondary),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AuraSpacing.sm),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Icon(Icons.graphic_eq_rounded, color: colors.accent, size: 28),
+              IconButton(
+                onPressed: canSeek ? onSkipBack : null,
+                icon: skipIcon(Icons.replay_rounded),
+                iconSize: 30,
+                tooltip: 'Back 15s',
+              ),
+              IconButton(
+                onPressed: onPlayPause,
+                icon: Icon(
+                  isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                  color: colors.textPrimary,
+                ),
+                iconSize: 46,
+                tooltip: 'Play / Pause',
+              ),
+              IconButton(
+                onPressed: canSeek ? onSkipForward : null,
+                icon: skipIcon(Icons.forward_rounded),
+                iconSize: 30,
+                tooltip: 'Forward 15s',
+              ),
+              IconButton(
+                onPressed: onDelete,
+                icon: Icon(Icons.delete_outline_rounded, color: colors.accent),
+                iconSize: 30,
+                tooltip: 'Delete',
+              ),
+            ],
           ),
         ],
       ),
