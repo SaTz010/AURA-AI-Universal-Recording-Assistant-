@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
 import 'recording_session_screen.dart';
+import 'widgets/dashboard_lower_content.dart';
 import 'widgets/main_bottom_nav.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -325,7 +326,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 ],
               ),
             ),
-            Expanded(
+            SizedBox(
+              height: 300,
               child: Center(
                 child: Stack(
                   alignment: Alignment.center,
@@ -400,25 +402,52 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 80),
-              child: Column(
-                children: [
-                  Text(
-                    'Tap to start recording',
-                    style: AuraTypography.bodyMedium(colors.textSecondary),
-                  ),
-                  if (_recordingStatus.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: AuraSpacing.sm),
-                      child: Text(
-                        _recordingStatus,
-                        textAlign: TextAlign.center,
-                        style: AuraTypography.overline(colors.accent),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(
+                  AuraSpacing.xl,
+                  0,
+                  AuraSpacing.xl,
+                  AuraSpacing.massive + AuraSpacing.xxl,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: AuraSpacing.xl),
+                        child: Column(
+                          children: [
+                            Text(
+                              'Tap to start recording',
+                              style: AuraTypography.bodyMedium(colors.textSecondary),
+                            ),
+                            if (_recordingStatus.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: AuraSpacing.sm),
+                                child: Text(
+                                  _recordingStatus,
+                                  textAlign: TextAlign.center,
+                                  style: AuraTypography.overline(colors.accent),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
-                  const SizedBox(height: AuraSpacing.xl),
-                ],
+                    DashboardLowerContent(
+                      onUploadFile: _showUploadSheet,
+                      onRecordMeeting: _openRecordingSession,
+                      onVoiceMemo: _openRecordingSession,
+                      onCloudImport: _showUploadSheet,
+                      onRecentTapped: (title) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Open: $title (not implemented)')),
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
