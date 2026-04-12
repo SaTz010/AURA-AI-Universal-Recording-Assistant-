@@ -129,6 +129,14 @@ class AuraTypography {
     letterSpacing: 0.3, color: color, height: 1.4,
   );
 
+  static TextStyle titleSmall(Color color) => TextStyle(
+    fontFamily: _fontFamily, fontSize: 14, fontWeight: FontWeight.w600,
+    letterSpacing: 0.2, color: color, height: 1.4,
+  );
+
+  // Backwards-compat alias (guards against incorrect casing in older UI code).
+  static TextStyle titlesmall(Color color) => titleSmall(color);
+
   static TextStyle bodyLarge(Color color) => TextStyle(
     fontFamily: _fontFamily, fontSize: 14, fontWeight: FontWeight.w500,
     letterSpacing: 0.3, color: color, height: 1.5,
