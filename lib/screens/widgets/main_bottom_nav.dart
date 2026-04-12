@@ -26,7 +26,7 @@ class MainBottomNav extends StatelessWidget {
         data: NavigationBarThemeData(
           backgroundColor: colors.surface,
           indicatorColor: colors.accent.withValues(alpha: 0.2),
-          height: 72,
+          height: 88,
           labelTextStyle: WidgetStateProperty.resolveWith((states) {
             final isSelected = states.contains(WidgetState.selected);
             return AuraTypography.labelSmall(
@@ -46,6 +46,7 @@ class MainBottomNav extends StatelessWidget {
         child: NavigationBar(
           selectedIndex: selectedIndex,
           onDestinationSelected: onTap,
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           destinations: const [
             NavigationDestination(
               icon: Icon(Icons.home_rounded),
