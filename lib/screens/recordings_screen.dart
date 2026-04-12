@@ -624,97 +624,33 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Padding(
-                padding: const EdgeInsets.all(AuraSpacing.md),
-                child: Row(
-                  children: [
-                    Material(
-                      color: Colors.transparent,
-                      borderRadius: AuraRadius.fullBr,
-                      child: InkWell(
-                        borderRadius: AuraRadius.fullBr,
-                        onTap: () => _playRecording(file.path),
-                        child: Icon(
-                          isPlaying
-                              ? Icons.pause_circle_filled_rounded
-                              : Icons.play_circle_filled_rounded,
-                          color: colors.accent,
-                          size: 40,
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: AuraRadius.mdBr,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    _toggleExpanded(file.path);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(AuraSpacing.md),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          fileName,
+                          style: AuraTypography.bodyLarge(colors.textPrimary),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ),
+                        const SizedBox(height: AuraSpacing.xxs),
+                        Text(
+                          '$formattedDate  •  ${_sourceLabel(entry.source)}  •  ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB',
+                          style: AuraTypography.caption(colors.textSecondary),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: AuraSpacing.md),
-                    Expanded(
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          borderRadius: AuraRadius.smBr,
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            _toggleExpanded(file.path);
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: AuraSpacing.xxs),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  fileName,
-                                  style: AuraTypography.bodyLarge(colors.textPrimary),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: AuraSpacing.xxs),
-                                Text(
-                                  '$formattedDate  •  ${_sourceLabel(entry.source)}  •  ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB',
-                                  style: AuraTypography.caption(colors.textSecondary),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (!isExpanded)
-                      Material(
-                        color: Colors.transparent,
-                        borderRadius: AuraRadius.fullBr,
-                        child: InkWell(
-                          borderRadius: AuraRadius.fullBr,
-                          onTap: () =>
-                              _showDeleteDialog(context, fileName, file.path, colors),
-                          child: Padding(
-                            padding: const EdgeInsets.all(AuraSpacing.sm),
-                            child: Icon(
-                              Icons.delete_outline_rounded,
-                              color: colors.textTertiary,
-                              size: 22,
-                            ),
-                          ),
-                        ),
-                      ),
-                    Material(
-                      color: Colors.transparent,
-                      borderRadius: AuraRadius.fullBr,
-                      child: InkWell(
-                        borderRadius: AuraRadius.fullBr,
-                        onTap: () {
-                          HapticFeedback.selectionClick();
-                          _toggleExpanded(file.path);
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(AuraSpacing.sm),
-                          child: Icon(
-                            isExpanded
-                                ? Icons.keyboard_arrow_up_rounded
-                                : Icons.keyboard_arrow_down_rounded,
-                            color: colors.textTertiary,
-                            size: 24,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
               AnimatedSize(
