@@ -173,10 +173,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
+    final topInset = MediaQuery.of(context).padding.top;
+
     final currentUser = FirebaseAuth.instance.currentUser;
     final userDocStream = currentUser == null
         ? null
         : FirebaseFirestore.instance.collection('users').doc(currentUser.uid).snapshots();
+
+    final overlayStyle = SystemUiOverlayStyle.light.copyWith(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      statusBarBrightness: Brightness.dark,
+    );
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -184,21 +192,25 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         selectedIndex: _selectedBottomIndex,
         onTap: _onBottomNavTapped,
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).padding.bottom + 140,
-          ),
-          child: Column(
-            children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AuraSpacing.xl,
-                  vertical: AuraSpacing.base,
+      body: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: overlayStyle,
+        child: Stack(
+          children: [
+            SafeArea(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(context).padding.bottom + 140,
                 ),
-                color: colors.surface,
-                child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                child: Column(
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AuraSpacing.xl,
+                        vertical: AuraSpacing.base,
+                      ),
+                      color: colors.surface,
+                      child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
                   stream: userDocStream,
                   builder: (context, snapshot) {
                     final data = snapshot.data?.data();
@@ -463,6 +475,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         ),
       ),
+      Positioned(
+        top: 0,
+        left: 0,
+        right: 0,
+        height: topInset,
+        child: Container(color: colors.surface),
+      ),
+    ],
+  ),
+),
     );
   }
 }
