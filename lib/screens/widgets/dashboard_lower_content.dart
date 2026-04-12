@@ -56,10 +56,8 @@ class DashboardLowerContent extends StatelessWidget {
         const _SectionHeader(title: 'Quick Actions'),
         const SizedBox(height: AuraSpacing.sm),
         _QuickActionsGrid(
-          onUploadFile: onUploadFile,
-          onRecordMeeting: onRecordMeeting,
-          onVoiceMemo: onVoiceMemo,
-          onCloudImport: onCloudImport,
+          onUploadAudio: onUploadFile,
+          onTbdAction: null,
         ),
         const SizedBox(height: AuraSpacing.xl),
         _StorageAndStatsCard(
@@ -205,16 +203,12 @@ class _RecentRecordingTile extends StatelessWidget {
 
 class _QuickActionsGrid extends StatelessWidget {
   const _QuickActionsGrid({
-    this.onUploadFile,
-    this.onRecordMeeting,
-    this.onVoiceMemo,
-    this.onCloudImport,
+    this.onUploadAudio,
+    this.onTbdAction,
   });
 
-  final VoidCallback? onUploadFile;
-  final VoidCallback? onRecordMeeting;
-  final VoidCallback? onVoiceMemo;
-  final VoidCallback? onCloudImport;
+  final VoidCallback? onUploadAudio;
+  final VoidCallback? onTbdAction;
 
   @override
   Widget build(BuildContext context) {
@@ -224,27 +218,19 @@ class _QuickActionsGrid extends StatelessWidget {
       mainAxisSpacing: AuraSpacing.sm,
       crossAxisSpacing: AuraSpacing.sm,
       physics: const NeverScrollableScrollPhysics(),
-      childAspectRatio: 1.65,
+      childAspectRatio: 2.35,
       children: [
         _ActionCard(
           icon: Icons.file_upload_outlined,
-          label: 'Upload File',
-          onTap: onUploadFile,
+          label: 'Upload Audio',
+          onTap: onUploadAudio,
+          dense: true,
         ),
         _ActionCard(
-          icon: Icons.groups_rounded,
-          label: 'Record Meeting',
-          onTap: onRecordMeeting,
-        ),
-        _ActionCard(
-          icon: Icons.keyboard_voice_rounded,
-          label: 'Voice Memo',
-          onTap: onVoiceMemo,
-        ),
-        _ActionCard(
-          icon: Icons.cloud_download_outlined,
-          label: 'Cloud Import',
-          onTap: onCloudImport,
+          icon: Icons.more_horiz_rounded,
+          label: 'Coming Soon',
+          onTap: onTbdAction,
+          dense: true,
         ),
       ],
     );
@@ -252,11 +238,17 @@ class _QuickActionsGrid extends StatelessWidget {
 }
 
 class _ActionCard extends StatelessWidget {
-  const _ActionCard({required this.icon, required this.label, this.onTap});
+  const _ActionCard({
+    required this.icon,
+    required this.label,
+    this.onTap,
+    this.dense = false,
+  });
 
   final IconData icon;
   final String label;
   final VoidCallback? onTap;
+  final bool dense;
 
   @override
   Widget build(BuildContext context) {
@@ -279,20 +271,20 @@ class _ActionCard extends StatelessWidget {
             onTap?.call();
           },
           child: Padding(
-            padding: const EdgeInsets.all(AuraSpacing.md),
+            padding: EdgeInsets.all(dense ? AuraSpacing.sm : AuraSpacing.md),
             child: Row(
               children: [
                 Container(
-                  width: 38,
-                  height: 38,
+                  width: dense ? 34 : 38,
+                  height: dense ? 34 : 38,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: colors.surfaceElevated,
                     border: Border.all(color: colors.border),
                   ),
-                  child: Icon(icon, color: colors.iconDefault, size: 20),
+                  child: Icon(icon, color: colors.iconDefault, size: dense ? 18 : 20),
                 ),
-                const SizedBox(width: AuraSpacing.md),
+                SizedBox(width: dense ? AuraSpacing.sm : AuraSpacing.md),
                 Expanded(
                   child: Text(
                     label,
