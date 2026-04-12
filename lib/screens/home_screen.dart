@@ -33,8 +33,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   late final AnimationController _micController;
   late final Animation<double> _pulseAnimation;
 
-  late final _HeroCopy _heroCopy;
-
   int _selectedBottomIndex = 0;
   String _recordingStatus = '';
   bool _isOpeningRecording = false;
@@ -55,8 +53,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
-
-    _heroCopy = _pickHeroCopy();
   }
 
   @override
@@ -90,20 +86,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildHeroQuote(AuraThemeColors colors) {
+    final heroCopy = _pickHeroCopy();
+
     return Column(
       children: [
         Text.rich(
           TextSpan(
             children: [
               TextSpan(
-                text: '${_heroCopy.headlineA} ',
+                text: '${heroCopy.headlineA} ',
                 style: AuraTypography.displayLarge(colors.textPrimary).copyWith(
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.2,
                 ),
               ),
               TextSpan(
-                text: _heroCopy.headlineB,
+                text: heroCopy.headlineB,
                 style: AuraTypography.displayLarge(colors.accent).copyWith(
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.2,
@@ -124,7 +122,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ),
         const SizedBox(height: AuraSpacing.base),
         Text(
-          _heroCopy.subhead,
+          heroCopy.subhead,
           textAlign: TextAlign.center,
           style: AuraTypography.bodyLarge(colors.textSecondary),
         ),
