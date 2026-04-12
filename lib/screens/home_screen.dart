@@ -425,6 +425,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               'Tap to start recording',
                               style: AuraTypography.bodyMedium(colors.textSecondary),
                             ),
+                            const SizedBox(height: AuraSpacing.sm),
+                            Container(
+                              width: 44,
+                              height: 2,
+                              decoration: BoxDecoration(
+                                color: colors.textTertiary.withValues(alpha: 0.45),
+                                borderRadius: AuraRadius.fullBr,
+                              ),
+                            ),
                             if (_recordingStatus.isNotEmpty)
                               Padding(
                                 padding: const EdgeInsets.only(top: AuraSpacing.sm),
