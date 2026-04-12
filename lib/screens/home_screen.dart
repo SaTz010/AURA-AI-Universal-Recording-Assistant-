@@ -8,6 +8,7 @@ import '../theme/aura_tokens.dart';
 import 'recording_session_screen.dart';
 import 'widgets/dashboard_lower_content.dart';
 import 'widgets/main_bottom_nav.dart';
+import 'widgets/total_recorded_stat.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -271,6 +272,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                     ),
                                   ),
                                 ),
+                                const SizedBox(height: AuraSpacing.xxs),
+                                const TotalRecordedStat(maxWidth: 170),
                               ],
                             ),
                           ],
