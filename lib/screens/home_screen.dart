@@ -16,18 +16,6 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HeroCopy {
-  const _HeroCopy({
-    required this.headlineA,
-    required this.headlineB,
-    required this.subhead,
-  });
-
-  final String headlineA;
-  final String headlineB;
-  final String subhead;
-}
-
 class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   late final AnimationController _pulseController;
   late final AnimationController _micController;
@@ -60,74 +48,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _pulseController.dispose();
     _micController.dispose();
     super.dispose();
-  }
-
-  _HeroCopy _pickHeroCopy() {
-    const options = <_HeroCopy>[
-      _HeroCopy(
-        headlineA: 'Record',
-        headlineB: 'the moment.',
-        subhead: 'Capture meetings, ideas, and memories in seconds.',
-      ),
-      _HeroCopy(
-        headlineA: 'Say it',
-        headlineB: 'once.',
-        subhead: 'Let AURA keep the details while you stay present.',
-      ),
-      _HeroCopy(
-        headlineA: 'Press',
-        headlineB: 'and speak.',
-        subhead: 'Clean, simple recording—ready when you are.',
-      ),
-    ];
-
-    final dayKey = DateTime.now().toUtc().difference(DateTime.utc(2026, 1, 1)).inDays;
-    return options[dayKey.abs() % options.length];
-  }
-
-  Widget _buildHeroQuote(AuraThemeColors colors) {
-    final heroCopy = _pickHeroCopy();
-
-    return Column(
-      children: [
-        Text.rich(
-          TextSpan(
-            children: [
-              TextSpan(
-                text: '${heroCopy.headlineA} ',
-                style: AuraTypography.displayLarge(colors.textPrimary).copyWith(
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.2,
-                ),
-              ),
-              TextSpan(
-                text: heroCopy.headlineB,
-                style: AuraTypography.displayLarge(colors.accent).copyWith(
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 1.2,
-                ),
-              ),
-            ],
-          ),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: AuraSpacing.sm),
-        Container(
-          width: 56,
-          height: 2,
-          decoration: BoxDecoration(
-            color: colors.textTertiary.withValues(alpha: 0.5),
-            borderRadius: AuraRadius.fullBr,
-          ),
-        ),
-        const SizedBox(height: AuraSpacing.base),
-        Text(
-          heroCopy.subhead,
-          textAlign: TextAlign.center,
-          style: AuraTypography.bodyLarge(colors.textSecondary),
-        ),
-      ],
-    );
   }
 
   Future<void> _openRecordingSession() async {
@@ -381,12 +301,34 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(
-                  AuraSpacing.xl,
+                  0,
                   AuraSpacing.huge,
-                  AuraSpacing.xl,
+                  0,
                   AuraSpacing.xxl,
                 ),
-                child: _buildHeroQuote(colors),
+                child: Column(
+                  children: [
+                    Text(
+                      'AURA',
+                      style: AuraTypography.headlineLarge(colors.textPrimary),
+                    ),
+                    const SizedBox(height: AuraSpacing.sm),
+                    Container(
+                      width: 40,
+                      height: 2,
+                      decoration: BoxDecoration(
+                        color: colors.textTertiary.withValues(alpha: 0.5),
+                        borderRadius: AuraRadius.fullBr,
+                      ),
+                    ),
+                    const SizedBox(height: AuraSpacing.base),
+                    Text(
+                      'Record now or import \n existing audio files to get started',
+                      textAlign: TextAlign.center,
+                      style: AuraTypography.bodyLarge(colors.textSecondary),
+                    ),
+                  ],
+                ),
               ),
               SizedBox(
                 height: 300,
