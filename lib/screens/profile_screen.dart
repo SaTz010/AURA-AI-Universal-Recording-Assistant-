@@ -105,60 +105,48 @@ class ProfileScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Container(
-              padding: const EdgeInsets.all(AuraSpacing.xl),
-              decoration: BoxDecoration(
-                color: colors.surface,
-                borderRadius: AuraRadius.xlBr,
-                border: Border.all(color: colors.border),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  CircleAvatar(
-                    radius: 34,
-                    backgroundColor: colors.surfaceElevated,
-                    backgroundImage: (photoUrl != null && photoUrl.isNotEmpty)
-                        ? NetworkImage(photoUrl)
-                        : null,
-                    child: (photoUrl == null || photoUrl.isEmpty)
-                        ? Icon(
-                            Icons.person_rounded,
-                            size: 34,
-                            color: colors.iconDefault,
-                          )
-                        : null,
-                  ),
-                  const SizedBox(width: AuraSpacing.lg),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          name,
-                          overflow: TextOverflow.ellipsis,
-                          style: AuraTypography.titleLarge(colors.textPrimary),
-                        ),
-                        const SizedBox(height: AuraSpacing.xxs),
-                        Text(
-                          email,
-                          overflow: TextOverflow.ellipsis,
-                          style: AuraTypography.bodyMedium(colors.textSecondary),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+            _ProfileHeader(
+              name: name,
+              email: email,
+              joinedAt: user?.metadata.creationTime?.toLocal(),
+              photoUrl: photoUrl,
             ),
-            const SizedBox(height: AuraSpacing.lg),
+            const SizedBox(height: AuraSpacing.xl),
+            const _SectionHeader(title: 'Current plan'),
+            const SizedBox(height: AuraSpacing.sm),
+            GridView.count(
+              crossAxisCount: 2,
+              crossAxisSpacing: AuraSpacing.sm,
+              mainAxisSpacing: AuraSpacing.sm,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              childAspectRatio: 2.35,
+              children: const [
+                _PlanMiniCard(
+                  icon: Icons.workspace_premium_rounded,
+                  label: 'Tier',
+                  value: 'Free',
+                ),
+                _PlanMiniCard(
+                  icon: Icons.event_available_rounded,
+                  label: 'Time remaining',
+                  value: '14 days',
+                ),
+                _PlanMiniCard(
+                  icon: Icons.auto_awesome_rounded,
+                  label: 'Summaries left',
+                  value: '12',
+                ),
+              ],
+            ),
+            const SizedBox(height: AuraSpacing.xl),
+            const _SectionHeader(title: 'Recordings'),
+            const SizedBox(height: AuraSpacing.sm),
             const RecordingTotalsCards(),
             const SizedBox(height: AuraSpacing.xl),
-            _ProfileInfoTile(
-              icon: Icons.workspace_premium_rounded,
-              label: 'Tier',
-              subtitle: 'Coming soon',
-            ),
+            const _SectionHeader(title: 'Summary'),
+            const SizedBox(height: AuraSpacing.sm),
+            const _ComingSoonCard(),
           ],
         ),
       ),
@@ -166,16 +154,172 @@ class ProfileScreen extends StatelessWidget {
   }
 }
 
-class _ProfileInfoTile extends StatelessWidget {
-  const _ProfileInfoTile({
+class _ProfileHeader extends StatelessWidget {
+  const _ProfileHeader({
+    required this.name,
+    required this.email,
+    required this.joinedAt,
+    required this.photoUrl,
+  });
+
+  final String name;
+  final String email;
+  final DateTime? joinedAt;
+  final String? photoUrl;
+
+  String _formatJoined(DateTime dt) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+
+    return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AuraThemeColors.of(context);
+
+    final joinedText = joinedAt == null ? 'Joined: —' : 'Joined ${_formatJoined(joinedAt!)}';
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        CircleAvatar(
+          radius: 34,
+          backgroundColor: colors.surfaceElevated,
+          backgroundImage: (photoUrl != null && photoUrl!.isNotEmpty) ? NetworkImage(photoUrl!) : null,
+          child: (photoUrl == null || photoUrl!.isEmpty)
+              ? Icon(
+                  Icons.person_rounded,
+                  size: 34,
+                  color: colors.iconDefault,
+                )
+              : null,
+        ),
+        const SizedBox(width: AuraSpacing.lg),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                name,
+                overflow: TextOverflow.ellipsis,
+                style: AuraTypography.titleLarge(colors.textPrimary),
+              ),
+              const SizedBox(height: AuraSpacing.xxs),
+              Text(
+                email,
+                overflow: TextOverflow.ellipsis,
+                style: AuraTypography.bodyMedium(colors.textSecondary),
+              ),
+              const SizedBox(height: AuraSpacing.xxs),
+              Text(
+                joinedText,
+                overflow: TextOverflow.ellipsis,
+                style: AuraTypography.caption(colors.textTertiary),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AuraThemeColors.of(context);
+
+    return Text(
+      title,
+      style: AuraTypography.titleMedium(colors.textPrimary).copyWith(
+        fontWeight: FontWeight.w800,
+      ),
+    );
+  }
+}
+
+class _PlanMiniCard extends StatelessWidget {
+  const _PlanMiniCard({
     required this.icon,
     required this.label,
-    required this.subtitle,
+    required this.value,
   });
 
   final IconData icon;
   final String label;
-  final String subtitle;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AuraThemeColors.of(context);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: AuraRadius.lgBr,
+        border: Border.all(color: colors.border),
+        boxShadow: AuraElevation.low(Colors.black),
+      ),
+      padding: const EdgeInsets.all(AuraSpacing.md),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: colors.surfaceElevated,
+              border: Border.all(color: colors.border),
+            ),
+            child: Icon(icon, size: 18, color: colors.accent),
+          ),
+          const SizedBox(width: AuraSpacing.sm),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: AuraTypography.caption(colors.textSecondary),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: AuraTypography.titleMedium(colors.textPrimary).copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ComingSoonCard extends StatelessWidget {
+  const _ComingSoonCard();
 
   @override
   Widget build(BuildContext context) {
@@ -187,43 +331,15 @@ class _ProfileInfoTile extends StatelessWidget {
         borderRadius: AuraRadius.lgBr,
         border: Border.all(color: colors.border),
       ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AuraSpacing.lg,
-        vertical: AuraSpacing.lg,
-      ),
+      padding: const EdgeInsets.all(AuraSpacing.lg),
       child: Row(
         children: [
-          Icon(icon, color: colors.accent),
+          Icon(Icons.auto_awesome_rounded, color: colors.accent),
           const SizedBox(width: AuraSpacing.md),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: AuraTypography.titleMedium(colors.textPrimary),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: AuraTypography.caption(colors.textSecondary),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AuraSpacing.sm,
-              vertical: AuraSpacing.xxs,
-            ),
-            decoration: BoxDecoration(
-              color: colors.surfaceElevated,
-              borderRadius: AuraRadius.fullBr,
-              border: Border.all(color: colors.border),
-            ),
             child: Text(
               'Coming soon',
-              style: AuraTypography.labelSmall(colors.textSecondary),
+              style: AuraTypography.bodyMedium(colors.textSecondary),
             ),
           ),
         ],
