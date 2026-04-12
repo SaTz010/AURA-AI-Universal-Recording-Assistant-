@@ -227,8 +227,8 @@ class _QuickActionsGrid extends StatelessWidget {
           dense: true,
         ),
         _ActionCard(
-          icon: Icons.more_horiz_rounded,
-          label: 'Coming Soon',
+          icon: Icons.summarize_rounded,
+          label: 'Summarize',
           onTap: onTbdAction,
           dense: true,
         ),
