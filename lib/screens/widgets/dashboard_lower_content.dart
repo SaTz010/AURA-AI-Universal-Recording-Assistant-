@@ -126,15 +126,13 @@ class _RecentRecordingPreviewData {
     required this.filePath,
     required this.title,
     required this.subtitle,
-    required this.duration,
-    required this.icon,
+    required this.durationText,
   });
 
   final String filePath;
   final String title;
   final String subtitle;
-  final String duration;
-  final IconData icon;
+  final String durationText;
 }
 
 class _RecentRecordingsPreview extends StatefulWidget {
@@ -150,10 +148,32 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
   bool _isLoading = true;
   List<_RecentRecordingPreviewData> _items = const [];
 
+  late final AudioPlayer _audioPlayer;
+  String? _expandedFilePath;
+  String? _loadedFilePath;
+  bool _isPreparing = false;
+  Duration _duration = Duration.zero;
+  Duration _position = Duration.zero;
+
   @override
   void initState() {
     super.initState();
+    _audioPlayer = AudioPlayer();
+    _audioPlayer.durationStream.listen((duration) {
+      if (!mounted) return;
+      setState(() => _duration = duration ?? Duration.zero);
+    });
+    _audioPlayer.positionStream.listen((position) {
+      if (!mounted) return;
+      setState(() => _position = position);
+    });
     _load();
+  }
+
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -188,8 +208,7 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
               filePath: file.path,
               title: title,
               subtitle: _formatRelativeDateTime(modified, now),
-              duration: _formatDuration(duration),
-              icon: Icons.play_circle_filled_rounded,
+              durationText: _formatDuration(duration),
             ),
           );
         }
@@ -254,6 +273,115 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
 
     final minutes = totalMinutes.toString().padLeft(2, '0');
     return '$minutes:$seconds';
+  }
+
+  Future<void> _prepareFile(String filePath) async {
+    if (_loadedFilePath == filePath) return;
+
+    try {
+      setState(() => _isPreparing = true);
+      await _audioPlayer.setFilePath(filePath);
+      if (!mounted) return;
+      setState(() {
+        _loadedFilePath = filePath;
+        _isPreparing = false;
+        _position = Duration.zero;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isPreparing = false);
+    }
+  }
+
+  Future<void> _toggleExpanded(String filePath) async {
+    if (_expandedFilePath == filePath) {
+      if (_loadedFilePath == filePath && _audioPlayer.playing) {
+        await _audioPlayer.pause();
+      }
+      if (!mounted) return;
+      setState(() => _expandedFilePath = null);
+      return;
+    }
+
+    setState(() => _expandedFilePath = filePath);
+    await _prepareFile(filePath);
+  }
+
+  Future<void> _playPause(String filePath) async {
+    try {
+      if (_loadedFilePath != filePath) {
+        await _prepareFile(filePath);
+      }
+
+      if (_audioPlayer.playing) {
+        await _audioPlayer.pause();
+      } else {
+        await _audioPlayer.play();
+      }
+
+      if (!mounted) return;
+      setState(() {});
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  Future<void> _seekRelative(String filePath, Duration delta) async {
+    if (_loadedFilePath != filePath) return;
+    if (_duration == Duration.zero) return;
+
+    final raw = _position + delta;
+    final clamped = raw < Duration.zero
+        ? Duration.zero
+        : (raw > _duration ? _duration : raw);
+
+    await _audioPlayer.seek(clamped);
+  }
+
+  Future<void> _deleteRecent(String filePath) async {
+    try {
+      if (_loadedFilePath == filePath) {
+        await _audioPlayer.stop();
+      }
+      await File(filePath).delete();
+      await _load();
+      if (!mounted) return;
+      setState(() {
+        if (_expandedFilePath == filePath) _expandedFilePath = null;
+        if (_loadedFilePath == filePath) _loadedFilePath = null;
+      });
+    } catch (_) {
+      // ignore
+    }
+  }
+
+  void _showDeleteDialog(AuraThemeColors colors, String title, String filePath) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('Delete Recording?'),
+        content: Text('Are you sure you want to delete $title?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogCtx);
+              _deleteRecent(filePath);
+            },
+            child: Text(
+              'Delete',
+              style: TextStyle(
+                color: colors.accent,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -339,14 +467,41 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
     return Column(
       children: [
         for (int i = 0; i < _items.length; i++) ...[
-          _RecentRecordingTile(
+          _RecentExpandableTile(
+            colors: colors,
             data: _items[i],
-            onTap: widget.onFileTap == null
+            isExpanded: _expandedFilePath == _items[i].filePath,
+            isActive: _loadedFilePath == _items[i].filePath,
+            isPlaying: _loadedFilePath == _items[i].filePath && _audioPlayer.playing,
+            isPreparing: _isPreparing && _loadedFilePath != _items[i].filePath,
+            position: _loadedFilePath == _items[i].filePath ? _position : Duration.zero,
+            duration: _loadedFilePath == _items[i].filePath ? _duration : Duration.zero,
+            onToggle: () {
+              HapticFeedback.selectionClick();
+              _toggleExpanded(_items[i].filePath);
+            },
+            onOpenFull: widget.onFileTap == null
                 ? null
                 : () {
                     HapticFeedback.lightImpact();
                     widget.onFileTap?.call(_items[i].filePath);
                   },
+            onPlayPause: () => _playPause(_items[i].filePath),
+            onSeekToSeconds: (seconds) =>
+                _audioPlayer.seek(Duration(seconds: seconds)),
+            onSkipBack: () => _seekRelative(
+              _items[i].filePath,
+              const Duration(seconds: -15),
+            ),
+            onSkipForward: () => _seekRelative(
+              _items[i].filePath,
+              const Duration(seconds: 15),
+            ),
+            onDelete: () => _showDeleteDialog(
+              colors,
+              _items[i].title,
+              _items[i].filePath,
+            ),
           ),
           if (i != _items.length - 1) const SizedBox(height: AuraSpacing.sm),
         ],
@@ -355,15 +510,78 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
   }
 }
 
-class _RecentRecordingTile extends StatelessWidget {
-  const _RecentRecordingTile({required this.data, this.onTap});
+class _RecentExpandableTile extends StatelessWidget {
+  const _RecentExpandableTile({
+    required this.colors,
+    required this.data,
+    required this.isExpanded,
+    required this.isActive,
+    required this.isPlaying,
+    required this.isPreparing,
+    required this.position,
+    required this.duration,
+    required this.onToggle,
+    required this.onOpenFull,
+    required this.onPlayPause,
+    required this.onSeekToSeconds,
+    required this.onSkipBack,
+    required this.onSkipForward,
+    required this.onDelete,
+  });
 
+  final AuraThemeColors colors;
   final _RecentRecordingPreviewData data;
-  final VoidCallback? onTap;
+  final bool isExpanded;
+  final bool isActive;
+  final bool isPlaying;
+  final bool isPreparing;
+  final Duration position;
+  final Duration duration;
+  final VoidCallback onToggle;
+  final VoidCallback? onOpenFull;
+  final VoidCallback onPlayPause;
+  final ValueChanged<int> onSeekToSeconds;
+  final VoidCallback onSkipBack;
+  final VoidCallback onSkipForward;
+  final VoidCallback onDelete;
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    final seconds = twoDigits(duration.inSeconds.remainder(60));
+    return '$minutes:$seconds';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final colors = AuraThemeColors.of(context);
+    final canSeek = isActive && duration.inMilliseconds > 0;
+    final maxSeconds = duration.inSeconds <= 0 ? 1 : duration.inSeconds;
+    final valueSeconds = canSeek
+        ? position.inSeconds.clamp(0, maxSeconds).toDouble()
+        : 0.0;
+
+    final remainingRaw = duration - position;
+    final remaining = remainingRaw.isNegative ? Duration.zero : remainingRaw;
+
+    final skipLabelStyle = AuraTypography.caption(colors.iconDefault).copyWith(
+      fontSize: 10,
+      fontWeight: FontWeight.w700,
+      height: 1,
+    );
+
+    Widget skipIcon(IconData baseIcon) {
+      return Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(baseIcon, color: colors.iconDefault),
+          Positioned(
+            bottom: 6,
+            child: Text('15', style: skipLabelStyle),
+          ),
+        ],
+      );
+    }
+
     return Container(
       decoration: BoxDecoration(
         color: colors.surface,
@@ -371,58 +589,145 @@ class _RecentRecordingTile extends StatelessWidget {
         border: Border.all(color: colors.border),
         boxShadow: AuraElevation.low(Colors.black),
       ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: AuraRadius.mdBr,
-        child: InkWell(
-          borderRadius: AuraRadius.mdBr,
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(AuraSpacing.md),
-            child: Row(
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: colors.surfaceElevated,
-                    border: Border.all(color: colors.border),
-                  ),
-                  child: Icon(data.icon, color: colors.accent, size: 26),
-                ),
-                const SizedBox(width: AuraSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        data.title,
-                        style: AuraTypography.bodyLarge(colors.textPrimary).copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: AuraRadius.mdBr,
+              onTap: onToggle,
+              onLongPress: onOpenFull,
+              child: Padding(
+                padding: const EdgeInsets.all(AuraSpacing.md),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            data.title,
+                            style: AuraTypography.bodyLarge(colors.textPrimary).copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: AuraSpacing.xxs),
+                          Text(
+                            data.subtitle,
+                            style: AuraTypography.caption(colors.textSecondary),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: AuraSpacing.xxs),
-                      Text(
-                        data.subtitle,
-                        style: AuraTypography.caption(colors.textSecondary),
-                        overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(width: AuraSpacing.md),
+                    Text(
+                      data.durationText,
+                      style: AuraTypography.caption(colors.textSecondary).copyWith(
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: AuraSpacing.md),
-                Text(
-                  data.duration,
-                  style: AuraTypography.caption(colors.textSecondary).copyWith(
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
-        ),
+          AnimatedSize(
+            duration: AuraMotion.fast,
+            curve: AuraMotion.standard,
+            child: isExpanded
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AuraSpacing.md,
+                      0,
+                      AuraSpacing.md,
+                      AuraSpacing.md,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(height: 1, color: colors.border),
+                        const SizedBox(height: AuraSpacing.sm),
+                        if (isPreparing) ...[
+                          LinearProgressIndicator(
+                            minHeight: 2,
+                            color: colors.accent,
+                            backgroundColor: colors.border,
+                          ),
+                          const SizedBox(height: AuraSpacing.sm),
+                        ],
+                        SliderTheme(
+                          data: SliderTheme.of(context).copyWith(
+                            trackHeight: 3,
+                            activeTrackColor: colors.accent,
+                            inactiveTrackColor: colors.border,
+                            thumbColor: colors.accent,
+                            overlayColor: colors.accent.withValues(alpha: 0.12),
+                          ),
+                          child: Slider(
+                            value: valueSeconds,
+                            max: maxSeconds.toDouble(),
+                            onChanged: canSeek ? (v) => onSeekToSeconds(v.toInt()) : null,
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: AuraSpacing.sm),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                _formatDuration(canSeek ? position : Duration.zero),
+                                style: AuraTypography.caption(colors.textSecondary),
+                              ),
+                              Text(
+                                canSeek ? '-${_formatDuration(remaining)}' : '--:--',
+                                style: AuraTypography.caption(colors.textSecondary),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: AuraSpacing.sm),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Icon(Icons.graphic_eq_rounded, color: colors.accent, size: 28),
+                            IconButton(
+                              onPressed: canSeek ? onSkipBack : null,
+                              icon: skipIcon(Icons.replay_rounded),
+                              iconSize: 30,
+                              tooltip: 'Back 15s',
+                            ),
+                            IconButton(
+                              onPressed: onPlayPause,
+                              icon: Icon(
+                                isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                color: colors.textPrimary,
+                              ),
+                              iconSize: 46,
+                              tooltip: 'Play / Pause',
+                            ),
+                            IconButton(
+                              onPressed: canSeek ? onSkipForward : null,
+                              icon: skipIcon(Icons.forward_rounded),
+                              iconSize: 30,
+                              tooltip: 'Forward 15s',
+                            ),
+                            IconButton(
+                              onPressed: onDelete,
+                              icon: Icon(Icons.delete_outline_rounded, color: colors.accent),
+                              iconSize: 30,
+                              tooltip: 'Delete',
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  )
+                : const SizedBox.shrink(),
+          ),
+        ],
       ),
     );
   }

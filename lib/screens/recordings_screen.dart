@@ -203,7 +203,16 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
 
   Future<void> _toggleExpanded(String filePath) async {
     if (_expandedFilePath == filePath) {
-      setState(() => _expandedFilePath = null);
+      if (_loadedFilePath == filePath && _audioPlayer.playing) {
+        await _audioPlayer.pause();
+      }
+      if (!mounted) return;
+      setState(() {
+        _expandedFilePath = null;
+        if (_loadedFilePath == filePath) {
+          _playingFilePath = null;
+        }
+      });
       return;
     }
 
@@ -242,6 +251,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
         return;
       }
 
+      setState(() => _isPreparing = true);
       await _audioPlayer.setFilePath(filePath);
       await _audioPlayer.play();
       if (!mounted) return;
@@ -249,9 +259,11 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
         _loadedFilePath = filePath;
         _playingFilePath = filePath;
         _expandedFilePath = filePath;
+        _isPreparing = false;
       });
     } catch (e) {
       if (!mounted) return;
+      setState(() => _isPreparing = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error playing audio: $e')),
       );
