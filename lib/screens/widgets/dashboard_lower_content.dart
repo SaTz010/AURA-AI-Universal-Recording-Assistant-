@@ -27,13 +27,6 @@ class DashboardLowerContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionHeader(title: 'Quick Actions'),
-        const SizedBox(height: AuraSpacing.sm),
-        _QuickActionsGrid(
-          onUploadAudio: onUploadFile,
-          onTbdAction: null,
-        ),
-        const SizedBox(height: AuraSpacing.xl),
         _SectionHeader(title: 'Recent'),
         const SizedBox(height: AuraSpacing.sm),
         _RecentRecordingsList(
@@ -58,6 +51,13 @@ class DashboardLowerContent extends StatelessWidget {
             ),
           ],
           onTap: onRecentTapped,
+        ),
+        const SizedBox(height: AuraSpacing.xl),
+        const _SectionHeader(title: 'Quick Actions'),
+        const SizedBox(height: AuraSpacing.sm),
+        _QuickActionsGrid(
+          onUploadAudio: onUploadFile,
+          onTbdAction: null,
         ),
         const SizedBox(height: AuraSpacing.xl),
         _StorageAndStatsCard(
