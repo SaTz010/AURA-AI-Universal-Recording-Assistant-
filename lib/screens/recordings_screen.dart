@@ -705,9 +705,9 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
 
         return Container(
           decoration: BoxDecoration(
-            color: colors.surfaceElevated,
+            color: colors.surface,
             borderRadius: AuraRadius.mdBr,
-            border: Border.all(color: colors.border.withValues(alpha: 0.35)),
+            border: Border.all(color: colors.border),
             boxShadow: AuraElevation.low(Colors.black),
           ),
           child: Column(
