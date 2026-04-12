@@ -9,6 +9,35 @@ import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
 import 'widgets/main_bottom_nav.dart';
 
+enum _RecordingSource { recorded, uploaded }
+
+enum _SortMode {
+  timeDesc,
+  timeAsc,
+  nameAsc,
+  nameDesc,
+  sizeDesc,
+  sizeAsc,
+}
+
+enum _SourceFilter { all, recorded, uploaded }
+
+class _RecordingEntry {
+  const _RecordingEntry({
+    required this.file,
+    required this.fileName,
+    required this.sizeBytes,
+    required this.modified,
+    required this.source,
+  });
+
+  final File file;
+  final String fileName;
+  final int sizeBytes;
+  final DateTime modified;
+  final _RecordingSource source;
+}
+
 class RecordingsScreen extends StatefulWidget {
   const RecordingsScreen({super.key});
 
@@ -17,8 +46,12 @@ class RecordingsScreen extends StatefulWidget {
 }
 
 class _RecordingsScreenState extends State<RecordingsScreen> {
-  List<FileSystemEntity> _recordings = [];
+  List<_RecordingEntry> _allRecordings = const [];
   bool _isLoading = true;
+
+  _SortMode _sortMode = _SortMode.timeDesc;
+  _SourceFilter _sourceFilter = _SourceFilter.all;
+
   late final AudioPlayer _audioPlayer;
   String? _playingFilePath;
   Duration _duration = Duration.zero;
@@ -59,19 +92,86 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
     super.dispose();
   }
 
+  _RecordingSource _inferSource(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.startsWith('aura_')) return _RecordingSource.recorded;
+    return _RecordingSource.uploaded;
+  }
+
+  String _sourceLabel(_RecordingSource source) {
+    switch (source) {
+      case _RecordingSource.recorded:
+        return 'Recorded';
+      case _RecordingSource.uploaded:
+        return 'Uploaded';
+    }
+  }
+
+  List<_RecordingEntry> _visibleRecordings() {
+    final filtered = _allRecordings.where((r) {
+      switch (_sourceFilter) {
+        case _SourceFilter.all:
+          return true;
+        case _SourceFilter.recorded:
+          return r.source == _RecordingSource.recorded;
+        case _SourceFilter.uploaded:
+          return r.source == _RecordingSource.uploaded;
+      }
+    }).toList();
+
+    int compare(_RecordingEntry a, _RecordingEntry b) {
+      switch (_sortMode) {
+        case _SortMode.timeDesc:
+          return b.modified.compareTo(a.modified);
+        case _SortMode.timeAsc:
+          return a.modified.compareTo(b.modified);
+        case _SortMode.nameAsc:
+          return a.fileName.toLowerCase().compareTo(b.fileName.toLowerCase());
+        case _SortMode.nameDesc:
+          return b.fileName.toLowerCase().compareTo(a.fileName.toLowerCase());
+        case _SortMode.sizeDesc:
+          return b.sizeBytes.compareTo(a.sizeBytes);
+        case _SortMode.sizeAsc:
+          return a.sizeBytes.compareTo(b.sizeBytes);
+      }
+    }
+
+    filtered.sort(compare);
+    return filtered;
+  }
+
   Future<void> _loadRecordings() async {
     try {
       final dir = await getApplicationDocumentsDirectory();
-      final files = dir.listSync();
-      final recordingFiles = files.where((file) => file.path.endsWith('.m4a')).toList();
-      recordingFiles.sort(
-        (a, b) => File(b.path).lastModifiedSync().compareTo(File(a.path).lastModifiedSync()),
-      );
+      final entities = dir.listSync();
+      final files = entities
+          .where((e) => e.path.toLowerCase().endsWith('.m4a'))
+          .map((e) => File(e.path))
+          .toList();
+
+      final entries = <_RecordingEntry>[];
+      for (final file in files) {
+        final fileName = file.path.split(RegExp(r'[\\/]')).last;
+        final sizeBytes = file.lengthSync();
+        final modified = file.lastModifiedSync();
+        entries.add(
+          _RecordingEntry(
+            file: file,
+            fileName: fileName,
+            sizeBytes: sizeBytes,
+            modified: modified,
+            source: _inferSource(fileName),
+          ),
+        );
+      }
+
+      if (!mounted) return;
       setState(() {
-        _recordings = recordingFiles;
+        _allRecordings = entries;
         _isLoading = false;
       });
     } catch (_) {
+      if (!mounted) return;
       setState(() => _isLoading = false);
     }
   }
@@ -103,6 +203,11 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
 
   Future<void> _deleteRecording(String filePath) async {
     try {
+      if (_playingFilePath == filePath) {
+        await _audioPlayer.stop();
+        setState(() => _playingFilePath = null);
+      }
+
       await File(filePath).delete();
       await _loadRecordings();
       if (!mounted) return;
@@ -117,9 +222,181 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
     }
   }
 
+  Future<void> _openFilterSheet() async {
+    final colors = AuraThemeColors.of(context);
+
+    var tempSort = _sortMode;
+    var tempSource = _sourceFilter;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: colors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AuraRadius.lg)),
+      ),
+      builder: (sheetContext) {
+        final sheetColors = AuraThemeColors.of(sheetContext);
+
+        Widget option({
+          required String label,
+          required bool selected,
+          required VoidCallback onTap,
+        }) {
+          return Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AuraSpacing.lg,
+                  vertical: AuraSpacing.md,
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: AuraTypography.bodyMedium(sheetColors.textPrimary),
+                      ),
+                    ),
+                    if (selected)
+                      Icon(Icons.check_rounded, color: sheetColors.accent, size: 20),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AuraSpacing.xl,
+                      AuraSpacing.lg,
+                      AuraSpacing.xl,
+                      AuraSpacing.sm,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Filter & Sort',
+                            style: AuraTypography.titleMedium(sheetColors.textPrimary),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            setSheetState(() {
+                              tempSort = _SortMode.timeDesc;
+                              tempSource = _SourceFilter.all;
+                            });
+                          },
+                          child: const Text('Reset'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: AuraSpacing.xl),
+                    child: Text(
+                      'Sort by',
+                      style: AuraTypography.overline(sheetColors.textSecondary),
+                    ),
+                  ),
+                  const SizedBox(height: AuraSpacing.xs),
+                  option(
+                    label: 'Time recorded (newest)',
+                    selected: tempSort == _SortMode.timeDesc,
+                    onTap: () => setSheetState(() => tempSort = _SortMode.timeDesc),
+                  ),
+                  option(
+                    label: 'Time recorded (oldest)',
+                    selected: tempSort == _SortMode.timeAsc,
+                    onTap: () => setSheetState(() => tempSort = _SortMode.timeAsc),
+                  ),
+                  option(
+                    label: 'Name (A → Z)',
+                    selected: tempSort == _SortMode.nameAsc,
+                    onTap: () => setSheetState(() => tempSort = _SortMode.nameAsc),
+                  ),
+                  option(
+                    label: 'Name (Z → A)',
+                    selected: tempSort == _SortMode.nameDesc,
+                    onTap: () => setSheetState(() => tempSort = _SortMode.nameDesc),
+                  ),
+                  option(
+                    label: 'Size (largest)',
+                    selected: tempSort == _SortMode.sizeDesc,
+                    onTap: () => setSheetState(() => tempSort = _SortMode.sizeDesc),
+                  ),
+                  option(
+                    label: 'Size (smallest)',
+                    selected: tempSort == _SortMode.sizeAsc,
+                    onTap: () => setSheetState(() => tempSort = _SortMode.sizeAsc),
+                  ),
+                  const SizedBox(height: AuraSpacing.sm),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: AuraSpacing.xl),
+                    child: Text(
+                      'Source',
+                      style: AuraTypography.overline(sheetColors.textSecondary),
+                    ),
+                  ),
+                  const SizedBox(height: AuraSpacing.xs),
+                  option(
+                    label: 'All',
+                    selected: tempSource == _SourceFilter.all,
+                    onTap: () => setSheetState(() => tempSource = _SourceFilter.all),
+                  ),
+                  option(
+                    label: 'Recorded',
+                    selected: tempSource == _SourceFilter.recorded,
+                    onTap: () => setSheetState(() => tempSource = _SourceFilter.recorded),
+                  ),
+                  option(
+                    label: 'Uploaded',
+                    selected: tempSource == _SourceFilter.uploaded,
+                    onTap: () => setSheetState(() => tempSource = _SourceFilter.uploaded),
+                  ),
+                  const SizedBox(height: AuraSpacing.lg),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AuraSpacing.xl,
+                      0,
+                      AuraSpacing.xl,
+                      AuraSpacing.xl,
+                    ),
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(sheetContext);
+                        setState(() {
+                          _sortMode = tempSort;
+                          _sourceFilter = tempSource;
+                        });
+                      },
+                      child: const Text('Apply'),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
+    final visible = _visibleRecordings();
+
     return Scaffold(
       backgroundColor: colors.background,
       bottomNavigationBar: MainBottomNav(
@@ -131,13 +408,23 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
         elevation: 0,
         leading: _ScreenBackButton(),
         title: Text('Recordings', style: AuraTypography.titleLarge(colors.textPrimary)),
-        centerTitle: true,
+        centerTitle: false,
+        actions: [
+          IconButton(
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              _openFilterSheet();
+            },
+            icon: Icon(Icons.tune_rounded, color: colors.iconDefault),
+            tooltip: 'Filter',
+          ),
+        ],
       ),
       body: _isLoading
           ? Center(child: CircularProgressIndicator(color: colors.accent))
-          : _recordings.isEmpty
-              ? _buildEmptyState(colors)
-              : _buildRecordingsList(colors),
+          : visible.isEmpty
+              ? (_allRecordings.isEmpty ? _buildEmptyState(colors) : _buildFilteredEmptyState(colors))
+              : _buildRecordingsList(colors, visible),
     );
   }
 
@@ -167,19 +454,78 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
     );
   }
 
-  Widget _buildRecordingsList(AuraThemeColors colors) {
+  Widget _buildFilteredEmptyState(AuraThemeColors colors) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: AuraSpacing.xl),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: colors.surfaceElevated,
+              ),
+              child: Icon(
+                Icons.filter_alt_off_rounded,
+                size: 44,
+                color: colors.textTertiary,
+              ),
+            ),
+            const SizedBox(height: AuraSpacing.xl),
+            Text(
+              'No matches',
+              style: AuraTypography.headlineMedium(colors.textPrimary),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AuraSpacing.sm),
+            Text(
+              'Try changing your filters to see more recordings.',
+              style: AuraTypography.bodyMedium(colors.textSecondary),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: AuraSpacing.lg),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                OutlinedButton(
+                  onPressed: _openFilterSheet,
+                  child: const Text('Edit filters'),
+                ),
+                const SizedBox(width: AuraSpacing.sm),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      _sortMode = _SortMode.timeDesc;
+                      _sourceFilter = _SourceFilter.all;
+                    });
+                  },
+                  child: const Text('Reset'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRecordingsList(AuraThemeColors colors, List<_RecordingEntry> recordings) {
     return ListView.separated(
       padding: const EdgeInsets.symmetric(
         horizontal: AuraSpacing.base,
         vertical: AuraSpacing.lg,
       ),
       separatorBuilder: (_, separatorIndex) => const SizedBox(height: AuraSpacing.sm),
-      itemCount: _recordings.length,
+      itemCount: recordings.length,
       itemBuilder: (context, index) {
-        final file = File(_recordings[index].path);
-        final fileName = file.path.split('/').last;
-        final fileSize = file.lengthSync();
-        final lastModified = file.lastModifiedSync();
+        final entry = recordings[index];
+        final file = entry.file;
+        final fileName = entry.fileName;
+        final fileSize = entry.sizeBytes;
+        final lastModified = entry.modified;
         final formattedDate =
             '${lastModified.year}-${lastModified.month.toString().padLeft(2, '0')}-${lastModified.day.toString().padLeft(2, '0')} '
             '${lastModified.hour.toString().padLeft(2, '0')}:${lastModified.minute.toString().padLeft(2, '0')}';
@@ -226,8 +572,9 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
                           ),
                           const SizedBox(height: AuraSpacing.xxs),
                           Text(
-                            '$formattedDate  •  ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB',
+                            '$formattedDate  •  ${_sourceLabel(entry.source)}  •  ${(fileSize / 1024 / 1024).toStringAsFixed(2)} MB',
                             style: AuraTypography.caption(colors.textSecondary),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
