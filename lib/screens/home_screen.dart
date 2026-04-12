@@ -173,15 +173,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
-    final homeHeaderBg = colors.surface.withValues(alpha: 0.5);
+    final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
+    final homeHeaderBg = isDarkTheme ? colors.surface.withValues(alpha: 0.5) : colors.surface;
     final topInset = MediaQuery.of(context).padding.top;
 
     final currentUser = FirebaseAuth.instance.currentUser;
     final userDocStream = currentUser == null
         ? null
         : FirebaseFirestore.instance.collection('users').doc(currentUser.uid).snapshots();
-
-    final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
 
     final overlayStyle = (isDarkTheme ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark).copyWith(
       statusBarColor: Colors.transparent,
