@@ -230,6 +230,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
 
     await showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
       backgroundColor: colors.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(AuraRadius.lg)),
@@ -270,120 +271,134 @@ class _RecordingsScreenState extends State<RecordingsScreen> {
 
         return StatefulBuilder(
           builder: (context, setSheetState) {
+            final maxHeight = MediaQuery.sizeOf(context).height * 0.85;
+
             return SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AuraSpacing.xl,
-                      AuraSpacing.lg,
-                      AuraSpacing.xl,
-                      AuraSpacing.sm,
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Filter & Sort',
-                            style: AuraTypography.titleMedium(sheetColors.textPrimary),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: maxHeight),
+                child: Column(
+                  mainAxisSize: MainAxisSize.max,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AuraSpacing.xl,
+                        AuraSpacing.lg,
+                        AuraSpacing.xl,
+                        AuraSpacing.sm,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Filter & Sort',
+                              style: AuraTypography.titleMedium(sheetColors.textPrimary),
+                            ),
                           ),
+                          TextButton(
+                            onPressed: () {
+                              setSheetState(() {
+                                tempSort = _SortMode.timeDesc;
+                                tempSource = _SourceFilter.all;
+                              });
+                            },
+                            child: const Text('Reset'),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: AuraSpacing.xl),
+                              child: Text(
+                                'Sort by',
+                                style: AuraTypography.overline(sheetColors.textSecondary),
+                              ),
+                            ),
+                            const SizedBox(height: AuraSpacing.xs),
+                            option(
+                              label: 'Time recorded (newest)',
+                              selected: tempSort == _SortMode.timeDesc,
+                              onTap: () => setSheetState(() => tempSort = _SortMode.timeDesc),
+                            ),
+                            option(
+                              label: 'Time recorded (oldest)',
+                              selected: tempSort == _SortMode.timeAsc,
+                              onTap: () => setSheetState(() => tempSort = _SortMode.timeAsc),
+                            ),
+                            option(
+                              label: 'Name (A → Z)',
+                              selected: tempSort == _SortMode.nameAsc,
+                              onTap: () => setSheetState(() => tempSort = _SortMode.nameAsc),
+                            ),
+                            option(
+                              label: 'Name (Z → A)',
+                              selected: tempSort == _SortMode.nameDesc,
+                              onTap: () => setSheetState(() => tempSort = _SortMode.nameDesc),
+                            ),
+                            option(
+                              label: 'Size (largest)',
+                              selected: tempSort == _SortMode.sizeDesc,
+                              onTap: () => setSheetState(() => tempSort = _SortMode.sizeDesc),
+                            ),
+                            option(
+                              label: 'Size (smallest)',
+                              selected: tempSort == _SortMode.sizeAsc,
+                              onTap: () => setSheetState(() => tempSort = _SortMode.sizeAsc),
+                            ),
+                            const SizedBox(height: AuraSpacing.sm),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: AuraSpacing.xl),
+                              child: Text(
+                                'Source',
+                                style: AuraTypography.overline(sheetColors.textSecondary),
+                              ),
+                            ),
+                            const SizedBox(height: AuraSpacing.xs),
+                            option(
+                              label: 'All',
+                              selected: tempSource == _SourceFilter.all,
+                              onTap: () => setSheetState(() => tempSource = _SourceFilter.all),
+                            ),
+                            option(
+                              label: 'Recorded',
+                              selected: tempSource == _SourceFilter.recorded,
+                              onTap: () => setSheetState(() => tempSource = _SourceFilter.recorded),
+                            ),
+                            option(
+                              label: 'Uploaded',
+                              selected: tempSource == _SourceFilter.uploaded,
+                              onTap: () => setSheetState(() => tempSource = _SourceFilter.uploaded),
+                            ),
+                            const SizedBox(height: AuraSpacing.lg),
+                          ],
                         ),
-                        TextButton(
-                          onPressed: () {
-                            setSheetState(() {
-                              tempSort = _SortMode.timeDesc;
-                              tempSource = _SourceFilter.all;
-                            });
-                          },
-                          child: const Text('Reset'),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: AuraSpacing.xl),
-                    child: Text(
-                      'Sort by',
-                      style: AuraTypography.overline(sheetColors.textSecondary),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AuraSpacing.xl,
+                        0,
+                        AuraSpacing.xl,
+                        AuraSpacing.xl,
+                      ),
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(sheetContext);
+                          setState(() {
+                            _sortMode = tempSort;
+                            _sourceFilter = tempSource;
+                          });
+                        },
+                        child: const Text('Apply'),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: AuraSpacing.xs),
-                  option(
-                    label: 'Time recorded (newest)',
-                    selected: tempSort == _SortMode.timeDesc,
-                    onTap: () => setSheetState(() => tempSort = _SortMode.timeDesc),
-                  ),
-                  option(
-                    label: 'Time recorded (oldest)',
-                    selected: tempSort == _SortMode.timeAsc,
-                    onTap: () => setSheetState(() => tempSort = _SortMode.timeAsc),
-                  ),
-                  option(
-                    label: 'Name (A → Z)',
-                    selected: tempSort == _SortMode.nameAsc,
-                    onTap: () => setSheetState(() => tempSort = _SortMode.nameAsc),
-                  ),
-                  option(
-                    label: 'Name (Z → A)',
-                    selected: tempSort == _SortMode.nameDesc,
-                    onTap: () => setSheetState(() => tempSort = _SortMode.nameDesc),
-                  ),
-                  option(
-                    label: 'Size (largest)',
-                    selected: tempSort == _SortMode.sizeDesc,
-                    onTap: () => setSheetState(() => tempSort = _SortMode.sizeDesc),
-                  ),
-                  option(
-                    label: 'Size (smallest)',
-                    selected: tempSort == _SortMode.sizeAsc,
-                    onTap: () => setSheetState(() => tempSort = _SortMode.sizeAsc),
-                  ),
-                  const SizedBox(height: AuraSpacing.sm),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: AuraSpacing.xl),
-                    child: Text(
-                      'Source',
-                      style: AuraTypography.overline(sheetColors.textSecondary),
-                    ),
-                  ),
-                  const SizedBox(height: AuraSpacing.xs),
-                  option(
-                    label: 'All',
-                    selected: tempSource == _SourceFilter.all,
-                    onTap: () => setSheetState(() => tempSource = _SourceFilter.all),
-                  ),
-                  option(
-                    label: 'Recorded',
-                    selected: tempSource == _SourceFilter.recorded,
-                    onTap: () => setSheetState(() => tempSource = _SourceFilter.recorded),
-                  ),
-                  option(
-                    label: 'Uploaded',
-                    selected: tempSource == _SourceFilter.uploaded,
-                    onTap: () => setSheetState(() => tempSource = _SourceFilter.uploaded),
-                  ),
-                  const SizedBox(height: AuraSpacing.lg),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AuraSpacing.xl,
-                      0,
-                      AuraSpacing.xl,
-                      AuraSpacing.xl,
-                    ),
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(sheetContext);
-                        setState(() {
-                          _sortMode = tempSort;
-                          _sourceFilter = tempSource;
-                        });
-                      },
-                      child: const Text('Apply'),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             );
           },
