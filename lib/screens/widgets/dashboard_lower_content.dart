@@ -565,22 +565,27 @@ class _RecentExpandableTile extends StatelessWidget {
     final remainingRaw = duration - position;
     final remaining = remainingRaw.isNegative ? Duration.zero : remainingRaw;
 
+    const skipIconSize = 30.0;
+
     final skipLabelStyle = AuraTypography.caption(colors.iconDefault).copyWith(
       fontSize: 10,
-      fontWeight: FontWeight.w700,
+      fontWeight: FontWeight.w800,
       height: 1,
     );
 
     Widget skipIcon(IconData baseIcon) {
-      return Stack(
-        alignment: Alignment.center,
-        children: [
-          Icon(baseIcon, color: colors.iconDefault),
-          Positioned(
-            bottom: 6,
-            child: Text('15', style: skipLabelStyle),
-          ),
-        ],
+      return SizedBox.square(
+        dimension: skipIconSize,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Icon(baseIcon, size: skipIconSize, color: colors.iconDefault),
+            Positioned(
+              bottom: skipIconSize * 0.20,
+              child: Text('15', style: skipLabelStyle),
+            ),
+          ],
+        ),
       );
     }
 
