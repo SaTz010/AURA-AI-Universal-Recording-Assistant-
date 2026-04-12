@@ -7,16 +7,14 @@ import 'package:path_provider/path_provider.dart';
 import '../../theme/aura_theme.dart';
 import '../../theme/aura_tokens.dart';
 
-class TotalRecordedStat extends StatefulWidget {
-  const TotalRecordedStat({super.key, this.maxWidth});
-
-  final double? maxWidth;
+class RecordingTotalsCards extends StatefulWidget {
+  const RecordingTotalsCards({super.key});
 
   @override
-  State<TotalRecordedStat> createState() => _TotalRecordedStatState();
+  State<RecordingTotalsCards> createState() => _RecordingTotalsCardsState();
 }
 
-class _TotalRecordedStatState extends State<TotalRecordedStat> {
+class _RecordingTotalsCardsState extends State<RecordingTotalsCards> {
   bool _isLoading = true;
   int _recordingsCount = 0;
   int _durationsResolved = 0;
@@ -124,64 +122,114 @@ class _TotalRecordedStatState extends State<TotalRecordedStat> {
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
 
-    final valueText = _isLoading
+    final totalTimeText = _isLoading
         ? '—'
         : (_durationsResolved == 0 && _recordingsCount > 0)
             ? '--'
             : _formatTotal(_totalRecorded);
 
+    final countText = _isLoading ? '—' : _recordingsCount.toString();
+
     final meta = _isLoading
         ? 'Calculating…'
         : _recordingsCount == 0
             ? 'No recordings yet'
-            : '$_recordingsCount recordings'
-                '${_latestTimestamp == null ? '' : ' • Last: ${_formatRelativeDateTime(_latestTimestamp!, DateTime.now())}'}';
+            : (_latestTimestamp == null)
+                ? '$_recordingsCount recordings'
+                : 'Last recorded: ${_formatRelativeDateTime(_latestTimestamp!, DateTime.now())}';
 
-    final content = Container(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _MiniStatCard(
+                icon: Icons.timer_rounded,
+                label: 'Total time',
+                value: totalTimeText,
+              ),
+            ),
+            const SizedBox(width: AuraSpacing.sm),
+            Expanded(
+              child: _MiniStatCard(
+                icon: Icons.multitrack_audio_rounded,
+                label: 'Recordings',
+                value: countText,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AuraSpacing.xs),
+        Text(
+          meta,
+          style: AuraTypography.caption(colors.textTertiary),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+}
+
+class _MiniStatCard extends StatelessWidget {
+  const _MiniStatCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AuraThemeColors.of(context);
+
+    return Container(
       decoration: BoxDecoration(
-        color: colors.surfaceElevated,
-        borderRadius: AuraRadius.fullBr,
+        color: colors.surface,
+        borderRadius: AuraRadius.lgBr,
         border: Border.all(color: colors.border),
+        boxShadow: AuraElevation.low(Colors.black),
       ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: AuraSpacing.sm,
-        vertical: AuraSpacing.xs,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.all(AuraSpacing.md),
+      child: Row(
         children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.timer_rounded, color: colors.accent, size: 16),
-              const SizedBox(width: AuraSpacing.xs),
-              Flexible(
-                child: Text(
-                  'Total recorded: $valueText',
-                  style: AuraTypography.caption(colors.textSecondary).copyWith(
-                    fontWeight: FontWeight.w600,
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: colors.surfaceElevated,
+              border: Border.all(color: colors.border),
+            ),
+            child: Icon(icon, size: 18, color: colors.accent),
+          ),
+          const SizedBox(width: AuraSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: AuraTypography.caption(colors.textSecondary),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: AuraTypography.titleMedium(colors.textPrimary).copyWith(
                     fontFeatures: const [FontFeature.tabularFigures()],
+                    fontWeight: FontWeight.w700,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 2),
-          Text(
-            meta,
-            style: AuraTypography.caption(colors.textTertiary),
-            overflow: TextOverflow.ellipsis,
+              ],
+            ),
           ),
         ],
       ),
-    );
-
-    if (widget.maxWidth == null) return content;
-
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: widget.maxWidth!),
-      child: content,
     );
   }
 }

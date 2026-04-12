@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../providers/auth_provider.dart';
 import '../theme/aura_theme.dart';
@@ -16,7 +17,27 @@ class ProfileScreen extends StatelessWidget {
     if (authProvider.isGuest) {
       return Scaffold(
         backgroundColor: colors.background,
-        appBar: AppBar(title: const Text('Profile')),
+        appBar: AppBar(
+          backgroundColor: colors.background,
+          elevation: 0,
+          title: Text(
+            'Profile',
+            style: AuraTypography.titleLarge(colors.textPrimary),
+          ),
+          centerTitle: false,
+          actions: [
+            IconButton(
+              onPressed: () {
+                HapticFeedback.lightImpact();
+                Navigator.pushNamed(context, '/settings');
+              },
+              icon: Icon(
+                Icons.settings_rounded,
+                color: colors.iconDefault,
+              ),
+            ),
+          ],
+        ),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -65,9 +86,21 @@ class ProfileScreen extends StatelessWidget {
           'Profile',
           style: AuraTypography.titleLarge(colors.textPrimary),
         ),
-        centerTitle: true,
+        centerTitle: false,
+        actions: [
+          IconButton(
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              Navigator.pushNamed(context, '/settings');
+            },
+            icon: Icon(
+              Icons.settings_rounded,
+              color: colors.iconDefault,
+            ),
+          ),
+        ],
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(AuraSpacing.xl),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -79,7 +112,8 @@ class ProfileScreen extends StatelessWidget {
                 borderRadius: AuraRadius.xlBr,
                 border: Border.all(color: colors.border),
               ),
-              child: Column(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   CircleAvatar(
                     radius: 34,
@@ -95,28 +129,35 @@ class ProfileScreen extends StatelessWidget {
                           )
                         : null,
                   ),
-                  const SizedBox(height: AuraSpacing.md),
-                  Text(
-                    name,
-                    textAlign: TextAlign.center,
-                    style: AuraTypography.titleLarge(colors.textPrimary),
+                  const SizedBox(width: AuraSpacing.lg),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          overflow: TextOverflow.ellipsis,
+                          style: AuraTypography.titleLarge(colors.textPrimary),
+                        ),
+                        const SizedBox(height: AuraSpacing.xxs),
+                        Text(
+                          email,
+                          overflow: TextOverflow.ellipsis,
+                          style: AuraTypography.bodyMedium(colors.textSecondary),
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: AuraSpacing.xs),
-                  Text(
-                    email,
-                    textAlign: TextAlign.center,
-                    style: AuraTypography.bodyMedium(colors.textSecondary),
-                  ),
-                  const SizedBox(height: AuraSpacing.md),
-                  const TotalRecordedStat(),
                 ],
               ),
             ),
+            const SizedBox(height: AuraSpacing.lg),
+            const RecordingTotalsCards(),
             const SizedBox(height: AuraSpacing.xl),
-            _ProfileActionTile(
-              icon: Icons.settings_rounded,
-              label: 'Settings',
-              onTap: () => Navigator.pushNamed(context, '/settings'),
+            _ProfileInfoTile(
+              icon: Icons.workspace_premium_rounded,
+              label: 'Tier',
+              subtitle: 'Coming soon',
             ),
           ],
         ),
@@ -125,53 +166,67 @@ class ProfileScreen extends StatelessWidget {
   }
 }
 
-class _ProfileActionTile extends StatelessWidget {
-  const _ProfileActionTile({
+class _ProfileInfoTile extends StatelessWidget {
+  const _ProfileInfoTile({
     required this.icon,
     required this.label,
-    required this.onTap,
+    required this.subtitle,
   });
 
   final IconData icon;
   final String label;
-  final VoidCallback onTap;
+  final String subtitle;
 
   @override
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
 
-    return Material(
-      color: colors.surface,
-      borderRadius: AuraRadius.lgBr,
-      child: InkWell(
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surface,
         borderRadius: AuraRadius.lgBr,
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AuraSpacing.lg,
-            vertical: AuraSpacing.lg,
-          ),
-          decoration: BoxDecoration(
-            borderRadius: AuraRadius.lgBr,
-            border: Border.all(color: colors.border),
-          ),
-          child: Row(
-            children: [
-              Icon(icon, color: colors.accent),
-              const SizedBox(width: AuraSpacing.md),
-              Expanded(
-                child: Text(
+        border: Border.all(color: colors.border),
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AuraSpacing.lg,
+        vertical: AuraSpacing.lg,
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: colors.accent),
+          const SizedBox(width: AuraSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
                   label,
                   style: AuraTypography.titleMedium(colors.textPrimary),
                 ),
-              ),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: colors.textTertiary,
-              ),
-            ],
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: AuraTypography.caption(colors.textSecondary),
+                ),
+              ],
+            ),
           ),
-        ),
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AuraSpacing.sm,
+              vertical: AuraSpacing.xxs,
+            ),
+            decoration: BoxDecoration(
+              color: colors.surfaceElevated,
+              borderRadius: AuraRadius.fullBr,
+              border: Border.all(color: colors.border),
+            ),
+            child: Text(
+              'Coming soon',
+              style: AuraTypography.labelSmall(colors.textSecondary),
+            ),
+          ),
+        ],
       ),
     );
   }
