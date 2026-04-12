@@ -210,9 +210,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(
                         horizontal: AuraSpacing.xl,
-                        vertical: AuraSpacing.base,
+                        vertical: AuraSpacing.lg,
                       ),
-                      color: homeHeaderBg,
+                      clipBehavior: Clip.antiAlias,
+                      decoration: BoxDecoration(
+                        color: homeHeaderBg,
+                        borderRadius: const BorderRadius.vertical(
+                          bottom: Radius.circular(AuraRadius.lg),
+                        ),
+                      ),
                       child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
                   stream: userDocStream,
                   builder: (context, snapshot) {
