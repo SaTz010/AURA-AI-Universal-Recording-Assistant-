@@ -330,9 +330,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ],
                 ),
               ),
-              SizedBox(
-                height: 300,
-                child: Center(
+              Center(
+                child: SizedBox(
+                  width: 260,
+                  height: 260,
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
@@ -406,6 +407,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ),
                 ),
               ),
+              const SizedBox(height: AuraSpacing.xxl),
               Padding(
                 padding: const EdgeInsets.fromLTRB(
                   AuraSpacing.xl,
