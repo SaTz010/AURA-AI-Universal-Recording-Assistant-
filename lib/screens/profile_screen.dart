@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../providers/auth_provider.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
+import 'widgets/total_recorded_stat.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -106,6 +107,8 @@ class ProfileScreen extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: AuraTypography.bodyMedium(colors.textSecondary),
                   ),
+                  const SizedBox(height: AuraSpacing.md),
+                  const TotalRecordedStat(),
                 ],
               ),
             ),
