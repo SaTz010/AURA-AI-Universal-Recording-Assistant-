@@ -567,7 +567,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
         onTap: _onBottomNavTapped,
       ),
       appBar: AppBar(
-        backgroundColor: colors.surface,
+        backgroundColor: colors.background,
         surfaceTintColor: Colors.transparent,
         scrolledUnderElevation: 0,
         elevation: 0,
