@@ -197,7 +197,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   horizontal: AuraSpacing.xl,
                   vertical: AuraSpacing.base,
                 ),
-                color: colors.background,
+                color: colors.surface,
                 child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
                   stream: userDocStream,
                   builder: (context, snapshot) {
