@@ -180,10 +180,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         ? null
         : FirebaseFirestore.instance.collection('users').doc(currentUser.uid).snapshots();
 
-    final overlayStyle = SystemUiOverlayStyle.light.copyWith(
+    final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
+
+    final overlayStyle = (isDarkTheme ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark).copyWith(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-      statusBarBrightness: Brightness.dark,
+      statusBarIconBrightness: isDarkTheme ? Brightness.light : Brightness.dark,
+      statusBarBrightness: isDarkTheme ? Brightness.dark : Brightness.light,
     );
 
     return Scaffold(
