@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:path_provider/path_provider.dart';
 
+import '../../providers/auth_provider.dart';
+import '../../services/recordings_library_events.dart';
+import '../../services/recordings_storage.dart';
 import '../../theme/aura_theme.dart';
 import '../../theme/aura_tokens.dart';
 
@@ -150,6 +153,9 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
   bool _isLoading = true;
   List<_RecentRecordingPreviewData> _items = const [];
 
+  String? _effectiveUid;
+  late final VoidCallback _libraryListener;
+
   late final AudioPlayer _audioPlayer;
   String? _expandedFilePath;
   String? _loadedFilePath;
@@ -169,20 +175,45 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
       if (!mounted) return;
       setState(() => _position = position);
     });
+
+    _libraryListener = () {
+      if (!mounted) return;
+      unawaited(_load());
+    };
+    RecordingsLibraryEvents.revision.addListener(_libraryListener);
     _load();
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final authProvider = AuraAuthProvider.of(context);
+    final nextUid = authProvider.isGuest ? null : authProvider.user?.uid;
+    if (nextUid == _effectiveUid) return;
+    _effectiveUid = nextUid;
+    _isLoading = true;
+    _items = const [];
+    unawaited(_load());
+  }
+
+  @override
   void dispose() {
+    RecordingsLibraryEvents.revision.removeListener(_libraryListener);
     _audioPlayer.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
     try {
-      final dir = await getApplicationDocumentsDirectory();
+      final dir = await RecordingsStorage.getUserRecordingsDir(_effectiveUid);
       final entities = dir.listSync();
-      final recordingFiles = entities.where((e) => e.path.toLowerCase().endsWith('.m4a')).toList();
+      final recordingFiles = entities
+          .where((e) => e.path.toLowerCase().endsWith('.m4a'))
+          .where((e) {
+            final name = e.path.split(RegExp(r'[\\/]')).last.toLowerCase();
+            return !name.startsWith('recording_');
+          })
+          .toList();
       recordingFiles.sort(
         (a, b) => File(b.path).lastModifiedSync().compareTo(File(a.path).lastModifiedSync()),
       );
