@@ -4,11 +4,16 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:path_provider/path_provider.dart';
 
+import '../providers/auth_provider.dart';
+import '../services/recordings_library_events.dart';
+import '../services/recordings_storage.dart';
+import '../services/summaries_library_events.dart';
+import '../services/summaries_storage.dart';
+import 'summary_detail_screen.dart';
+import 'widgets/analyzing_screen.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
-import 'widgets/main_bottom_nav.dart';
 
 enum _RecordingSource { recorded, uploaded }
 
@@ -52,6 +57,9 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
 
   final Map<String, Duration?> _durationCache = {};
 
+  String? _effectiveUid;
+  late final VoidCallback _libraryListener;
+
   _SortMode _sortMode = _SortMode.timeDesc;
   _SourceFilter _sourceFilter = _SourceFilter.all;
 
@@ -64,21 +72,25 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
 
-  Future<void> _onBottomNavTapped(int index) async {
-    if (index == 1) return;
+  static const Map<String, String> _summarizeContextOptions = {
+    '1': 'Medical consultation',
+    '2': 'Business meeting',
+    '3': 'Interview',
+    '4': 'Lecture / class',
+    '5': 'Personal note',
+    '6': 'Legal / official',
+    '7': 'Other',
+  };
 
-    switch (index) {
-      case 0:
-        Navigator.pushReplacementNamed(context, '/home');
-        break;
-      case 2:
-        Navigator.pushReplacementNamed(context, '/history');
-        break;
-      case 3:
-        Navigator.pushReplacementNamed(context, '/summary');
-        break;
-    }
-  }
+  static const Map<String, IconData> _summarizeContextIcons = {
+    '1': Icons.medical_services_rounded,
+    '2': Icons.business_center_rounded,
+    '3': Icons.mic_rounded,
+    '4': Icons.school_rounded,
+    '5': Icons.sticky_note_2_rounded,
+    '6': Icons.gavel_rounded,
+    '7': Icons.auto_awesome_rounded,
+  };
 
   @override
   void initState() {
@@ -90,11 +102,35 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
     _audioPlayer.positionStream.listen((position) {
       setState(() => _position = position);
     });
-    _loadRecordings();
+
+    _libraryListener = () {
+      if (!mounted) return;
+      unawaited(_loadRecordings());
+    };
+    RecordingsLibraryEvents.revision.addListener(_libraryListener);
+
+    unawaited(_loadRecordings());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final authProvider = AuraAuthProvider.of(context);
+    final nextUid = authProvider.isGuest ? null : authProvider.user?.uid;
+    if (nextUid == _effectiveUid) return;
+
+    _effectiveUid = nextUid;
+    _durationCache.clear();
+    _loadedFilePath = null;
+    _expandedFilePath = null;
+    _playingFilePath = null;
+    _isLoading = true;
+    unawaited(_loadRecordings());
   }
 
   @override
   void dispose() {
+    RecordingsLibraryEvents.revision.removeListener(_libraryListener);
     _audioPlayer.dispose();
     super.dispose();
   }
@@ -103,6 +139,349 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
     final lower = fileName.toLowerCase();
     if (lower.startsWith('aura_')) return _RecordingSource.recorded;
     return _RecordingSource.uploaded;
+  }
+
+  Future<String?> _openSummarizeContextSheet(AuraThemeColors colors, String audioTitle) async {
+    HapticFeedback.lightImpact();
+
+    return showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final sheetColors = AuraThemeColors.of(ctx);
+        return SafeArea(
+          top: false,
+          child: DraggableScrollableSheet(
+            initialChildSize: 0.70,
+            minChildSize: 0.55,
+            maxChildSize: 0.90,
+            builder: (context, scrollController) {
+              return Container(
+                decoration: BoxDecoration(
+                  color: sheetColors.surface,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(26),
+                    topRight: Radius.circular(26),
+                  ),
+                  border: Border.all(color: sheetColors.border),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: AuraSpacing.sm),
+                    Center(
+                      child: Container(
+                        width: 44,
+                        height: 5,
+                        decoration: BoxDecoration(
+                          color: sheetColors.border,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AuraSpacing.base,
+                        AuraSpacing.lg,
+                        AuraSpacing.base,
+                        AuraSpacing.sm,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Select context',
+                              style: AuraTypography.titleLarge(sheetColors.textPrimary),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.of(ctx).pop(),
+                            icon: Icon(Icons.close_rounded, color: sheetColors.iconDefault),
+                            tooltip: 'Close',
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: AuraSpacing.base),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: sheetColors.surfaceElevated,
+                          borderRadius: AuraRadius.smBr,
+                          border: Border.all(color: sheetColors.border),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AuraSpacing.md,
+                          vertical: AuraSpacing.sm,
+                        ),
+                        child: Text(
+                          audioTitle,
+                          style: AuraTypography.bodyMedium(sheetColors.textPrimary)
+                              .copyWith(fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AuraSpacing.sm),
+                    Expanded(
+                      child: ListView.separated(
+                        controller: scrollController,
+                        padding: const EdgeInsets.fromLTRB(
+                          AuraSpacing.base,
+                          AuraSpacing.sm,
+                          AuraSpacing.base,
+                          AuraSpacing.lg,
+                        ),
+                        itemCount: _summarizeContextOptions.length,
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: AuraSpacing.sm),
+                        itemBuilder: (ctx, index) {
+                          final key = _summarizeContextOptions.keys.elementAt(index);
+                          final label = _summarizeContextOptions[key]!;
+                          final icon = _summarizeContextIcons[key] ?? Icons.circle;
+
+                          return Container(
+                            decoration: BoxDecoration(
+                              color: sheetColors.surface,
+                              borderRadius: AuraRadius.mdBr,
+                              border: Border.all(color: sheetColors.border),
+                              boxShadow: AuraElevation.low(Colors.black),
+                            ),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                borderRadius: AuraRadius.mdBr,
+                                onTap: () {
+                                  HapticFeedback.selectionClick();
+                                  Navigator.of(ctx).pop(key);
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: AuraSpacing.lg,
+                                    vertical: AuraSpacing.md,
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 36,
+                                        height: 36,
+                                        decoration: BoxDecoration(
+                                          color: sheetColors.surfaceElevated,
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(color: sheetColors.border),
+                                        ),
+                                        alignment: Alignment.center,
+                                        child: Icon(
+                                          icon,
+                                          size: 20,
+                                          color: sheetColors.accent,
+                                        ),
+                                      ),
+                                      const SizedBox(width: AuraSpacing.md),
+                                      Expanded(
+                                        child: Text(
+                                          label,
+                                          style: AuraTypography.bodyLarge(sheetColors.textPrimary)
+                                              .copyWith(fontWeight: FontWeight.w600),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Future<String?> _openSummarizeExtraDetailsSheet(AuraThemeColors colors, String audioTitle) async {
+    HapticFeedback.lightImpact();
+
+    return showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final sheetColors = AuraThemeColors.of(ctx);
+        final controller = TextEditingController();
+
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+            child: Container(
+              decoration: BoxDecoration(
+                color: sheetColors.surface,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(26),
+                  topRight: Radius.circular(26),
+                ),
+                border: Border.all(color: sheetColors.border),
+              ),
+              padding: const EdgeInsets.fromLTRB(
+                AuraSpacing.base,
+                AuraSpacing.lg,
+                AuraSpacing.base,
+                AuraSpacing.lg,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Any extra detail?',
+                          style: AuraTypography.titleLarge(sheetColors.textPrimary),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        icon: Icon(Icons.close_rounded, color: sheetColors.iconDefault),
+                        tooltip: 'Close',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AuraSpacing.sm),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: sheetColors.surfaceElevated,
+                      borderRadius: AuraRadius.smBr,
+                      border: Border.all(color: sheetColors.border),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AuraSpacing.md,
+                      vertical: AuraSpacing.sm,
+                    ),
+                    child: Text(
+                      audioTitle,
+                      style: AuraTypography.bodyMedium(sheetColors.textPrimary)
+                          .copyWith(fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(height: AuraSpacing.md),
+                  TextField(
+                    controller: controller,
+                    maxLines: 3,
+                    minLines: 3,
+                    enableSuggestions: false,
+                    autocorrect: false,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: InputDecoration(
+                      hintText: 'Optional — add helpful notes for summarization',
+                      filled: true,
+                      fillColor: sheetColors.surface,
+                      border: OutlineInputBorder(
+                        borderRadius: AuraRadius.mdBr,
+                        borderSide: BorderSide(color: sheetColors.border),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: AuraRadius.mdBr,
+                        borderSide: BorderSide(color: sheetColors.border),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: AuraRadius.mdBr,
+                        borderSide: BorderSide(color: sheetColors.accent),
+                      ),
+                    ),
+                    style: AuraTypography.bodyMedium(sheetColors.textPrimary),
+                  ),
+                  const SizedBox(height: AuraSpacing.lg),
+                  ElevatedButton(
+                    onPressed: () {
+                      final text = controller.text.trim();
+                      Navigator.of(ctx).pop(text);
+                    },
+                    child: const Text('Continue'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _startSummarizeFlowForEntry(_RecordingEntry entry) async {
+    final colors = AuraThemeColors.of(context);
+    final title = _displayTitle(entry.fileName);
+    final uid = _effectiveUid;
+
+    final existing = await SummariesStorage.load(uid);
+    final alreadyExists = existing.any((s) => s.filePath == entry.file.path);
+    if (alreadyExists) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('This audio is already in your summarized list.'),
+          backgroundColor: colors.surface,
+        ),
+      );
+      return;
+    }
+
+    final contextKey = await _openSummarizeContextSheet(colors, title);
+    if (!mounted) return;
+    if (contextKey == null || !_summarizeContextOptions.containsKey(contextKey)) return;
+
+    final extraDetails = await _openSummarizeExtraDetailsSheet(colors, title);
+    if (!mounted) return;
+    if (extraDetails == null) return;
+
+    final subtitle = extraDetails.isEmpty
+        ? _summarizeContextOptions[contextKey]!
+        : '${_summarizeContextOptions[contextKey]} • Using extra details';
+
+    await Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (ctx, a1, a2) => AnalyzingScreen(
+          title: 'Analyzing…',
+          subtitle: subtitle,
+        ),
+        transitionsBuilder: (ctx, animation, secondary, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: AuraMotion.fast,
+      ),
+    );
+
+    final contextLabel = _summarizeContextOptions[contextKey]!;
+    final summaryText = extraDetails.isEmpty
+        ? 'Context: $contextLabel\n\nSummary will appear here later.'
+        : 'Context: $contextLabel\n\nSummary will appear here later.\n\n(Extra details were provided.)';
+
+    final newEntry = SummarizedAudio(
+      filePath: entry.file.path,
+      fileName: entry.fileName,
+      createdAtMs: DateTime.now().millisecondsSinceEpoch,
+      description: summaryText,
+    );
+
+    final next = [newEntry, ...existing];
+    await SummariesStorage.save(uid, next);
+    SummariesLibraryEvents.notifyChanged();
+
+    if (!mounted) return;
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (ctx) => SummaryDetailScreen(summary: newEntry),
+      ),
+    );
   }
 
 
@@ -141,11 +520,15 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
 
   Future<void> _loadRecordings() async {
     try {
-      final dir = await getApplicationDocumentsDirectory();
+      final dir = await RecordingsStorage.getUserRecordingsDir(_effectiveUid);
       final entities = dir.listSync();
       final files = entities
           .where((e) => e.path.toLowerCase().endsWith('.m4a'))
           .map((e) => File(e.path))
+          .where((f) {
+            final name = f.path.split(RegExp(r'[\\/]')).last.toLowerCase();
+            return !name.startsWith('recording_');
+          })
           .toList();
 
       final entries = <_RecordingEntry>[];
@@ -359,6 +742,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
       await File(filePath).delete();
       await _loadRecordings();
       if (!mounted) return;
+      RecordingsLibraryEvents.notifyChanged();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Recording deleted')),
       );
@@ -562,16 +946,12 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
 
     return Scaffold(
       backgroundColor: colors.background,
-      bottomNavigationBar: MainBottomNav(
-        selectedIndex: 1,
-        onTap: _onBottomNavTapped,
-      ),
       appBar: AppBar(
         backgroundColor: colors.background,
         surfaceTintColor: Colors.transparent,
         scrolledUnderElevation: 0,
         elevation: 0,
-        leading: _ScreenBackButton(),
+        automaticallyImplyLeading: false,
         title: Text('Recordings', style: AuraTypography.titleLarge(colors.textPrimary)),
         centerTitle: false,
         actions: [
@@ -784,7 +1164,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
                           file.path,
                           colors,
                         ),
-                        onSummarize: () {},
+                        onSummarize: () => _startSummarizeFlowForEntry(entry),
                       )
                     : const SizedBox.shrink(),
               ),
@@ -976,27 +1356,6 @@ class _InlinePlayer extends StatelessWidget {
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _ScreenBackButton extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final colors = AuraThemeColors.of(context);
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: AuraRadius.smBr,
-        onTap: () {
-          HapticFeedback.lightImpact();
-          Navigator.pop(context);
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(AuraSpacing.sm),
-          child: Icon(Icons.arrow_back_rounded, color: colors.iconDefault),
-        ),
       ),
     );
   }
