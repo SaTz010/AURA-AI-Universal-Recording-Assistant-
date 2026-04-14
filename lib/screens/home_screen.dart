@@ -7,10 +7,11 @@ import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
 import 'recording_session_screen.dart';
 import 'widgets/dashboard_lower_content.dart';
-import 'widgets/main_bottom_nav.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.onSelectTab});
+
+  final ValueChanged<int>? onSelectTab;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -21,7 +22,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   late final AnimationController _micController;
   late final Animation<double> _pulseAnimation;
 
-  int _selectedBottomIndex = 0;
   String _recordingStatus = '';
   bool _isOpeningRecording = false;
 
@@ -79,27 +79,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Future<void> _onBottomNavTapped(int index) async {
-    if (index == _selectedBottomIndex) return;
-    setState(() => _selectedBottomIndex = index);
-
-    switch (index) {
-      case 0:
-        return;
-      case 1:
-        await Navigator.pushNamed(context, '/recordings');
-        break;
-      case 2:
-        await Navigator.pushNamed(context, '/history');
-        break;
-      case 3:
-        await Navigator.pushNamed(context, '/summary');
-        break;
-    }
-
-    if (mounted) {
-      setState(() => _selectedBottomIndex = 0);
-    }
+  void _selectTab(int index) {
+    widget.onSelectTab?.call(index);
   }
 
   void _showUploadSheet() {
@@ -190,10 +171,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     return Scaffold(
       backgroundColor: colors.background,
-      bottomNavigationBar: MainBottomNav(
-        selectedIndex: _selectedBottomIndex,
-        onTap: _onBottomNavTapped,
-      ),
       body: AnnotatedRegion<SystemUiOverlayStyle>(
         value: overlayStyle,
         child: Stack(
@@ -487,9 +464,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     const SizedBox(height: AuraSpacing.lg),
                     DashboardLowerContent(
                       onUploadAudio: _showUploadSheet,
-                      onSummarize: () => _onBottomNavTapped(3),
-                      onViewAllRecent: () => _onBottomNavTapped(1),
-                      onRecentFileTap: (_) => _onBottomNavTapped(1),
+                      onSummarize: () => _selectTab(3),
+                      onViewAllRecent: () => _selectTab(1),
+                      onRecentFileTap: (_) => _selectTab(1),
                     ),
                   ],
                 ),
