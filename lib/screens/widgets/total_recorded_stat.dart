@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:path_provider/path_provider.dart';
 
+import '../../providers/auth_provider.dart';
+import '../../services/recordings_storage.dart';
 import '../../theme/aura_theme.dart';
 import '../../theme/aura_tokens.dart';
 
@@ -21,19 +23,39 @@ class _RecordingTotalsCardsState extends State<RecordingTotalsCards> {
   Duration _totalRecorded = Duration.zero;
   DateTime? _latestTimestamp;
 
+  String? _effectiveUid;
+
   @override
   void initState() {
     super.initState();
     _load();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final authProvider = AuraAuthProvider.of(context);
+    final nextUid = authProvider.isGuest ? null : authProvider.user?.uid;
+    if (nextUid == _effectiveUid) return;
+    _effectiveUid = nextUid;
+    unawaited(_load());
+  }
+
   Future<void> _load() async {
+    if (mounted) {
+      setState(() => _isLoading = true);
+    }
+
     try {
-      final dir = await getApplicationDocumentsDirectory();
+      final dir = await RecordingsStorage.getUserRecordingsDir(_effectiveUid);
       final entities = dir.listSync();
       final files = entities
           .where((e) => e.path.toLowerCase().endsWith('.m4a'))
           .map((e) => File(e.path))
+          .where((f) {
+            final name = f.path.split(RegExp(r'[\\/]')).last.toLowerCase();
+            return !name.startsWith('recording_');
+          })
           .toList();
 
       final audioPlayer = AudioPlayer();
