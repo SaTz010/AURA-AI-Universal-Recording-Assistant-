@@ -1,0 +1,99 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:path_provider/path_provider.dart';
+
+class SummarizedAudio {
+  const SummarizedAudio({
+    required this.filePath,
+    required this.fileName,
+    required this.createdAtMs,
+    required this.description,
+  });
+
+  final String filePath;
+  final String fileName;
+  final int createdAtMs;
+  final String description;
+
+  Map<String, Object?> toJson() => {
+        'filePath': filePath,
+        'fileName': fileName,
+        'createdAtMs': createdAtMs,
+        'description': description,
+      };
+
+  static SummarizedAudio? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+
+    final filePath = raw['filePath'];
+    final fileName = raw['fileName'];
+    final createdAtMs = raw['createdAtMs'];
+    final description = raw['description'];
+
+    if (filePath is! String || filePath.isEmpty) return null;
+    if (fileName is! String || fileName.isEmpty) return null;
+    if (createdAtMs is! int) return null;
+    if (description is! String) return null;
+
+    return SummarizedAudio(
+      filePath: filePath,
+      fileName: fileName,
+      createdAtMs: createdAtMs,
+      description: description,
+    );
+  }
+}
+
+class SummariesStorage {
+  static const String _rootFolderName = 'summaries';
+  static const String _indexFileName = 'summaries.json';
+
+  static String _folderNameForUid(String? uid) {
+    final normalized = uid?.trim();
+    if (normalized == null || normalized.isEmpty) return '_guest';
+    return normalized;
+  }
+
+  static String _join(String a, String b) {
+    final sep = Platform.pathSeparator;
+    if (a.endsWith(sep)) return '$a$b';
+    return '$a$sep$b';
+  }
+
+  static Future<File> _indexFile(String? uid) async {
+    final docs = await getApplicationDocumentsDirectory();
+    final dir = Directory(
+      _join(
+        _join(docs.path, _rootFolderName),
+        _folderNameForUid(uid),
+      ),
+    );
+
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+
+    return File(_join(dir.path, _indexFileName));
+  }
+
+  static Future<List<SummarizedAudio>> load(String? uid) async {
+    try {
+      final file = await _indexFile(uid);
+      if (!await file.exists()) return const [];
+
+      final raw = jsonDecode(await file.readAsString());
+      if (raw is! List) return const [];
+
+      return raw.map(SummarizedAudio.fromJson).whereType<SummarizedAudio>().toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  static Future<void> save(String? uid, List<SummarizedAudio> items) async {
+    final file = await _indexFile(uid);
+    final jsonText = jsonEncode(items.map((e) => e.toJson()).toList());
+    await file.writeAsString(jsonText);
+  }
+}
