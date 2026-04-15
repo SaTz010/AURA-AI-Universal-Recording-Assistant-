@@ -178,7 +178,24 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
     }));
 
     try {
-      final path = await _recorderController.stop() ?? _recordingPath;
+      // Some devices/plugins can hang on stop() for long recordings.
+      // If paused, resume first; then stop with a timeout fallback.
+      if (_isPaused) {
+        try {
+          await _recorderController.record();
+          _recordingStopwatch.start();
+          if (mounted) {
+            setState(() {
+              _isPaused = false;
+            });
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 150));
+        } catch (_) {
+          // Ignore and continue to stop attempt.
+        }
+      }
+
+      final path = await _stopRecorderWithTimeout() ?? _recordingPath;
 
       _recordingStopwatch
         ..stop()
@@ -233,6 +250,23 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
         setState(() => _isStopping = false);
       }
       _isBusy = false;
+    }
+  }
+
+  Future<String?> _stopRecorderWithTimeout() async {
+    try {
+      return await _recorderController
+          .stop()
+          .timeout(const Duration(seconds: 15));
+    } on TimeoutException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Recorder took too long to finalize. Saving best effort...'),
+          ),
+        );
+      }
+      return null;
     }
   }
 

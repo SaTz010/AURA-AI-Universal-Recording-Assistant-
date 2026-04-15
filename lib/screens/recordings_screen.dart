@@ -6,12 +6,13 @@ import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../providers/auth_provider.dart';
+import '../services/api_service.dart';
 import '../services/recordings_library_events.dart';
 import '../services/recordings_storage.dart';
 import '../services/summaries_library_events.dart';
 import '../services/summaries_storage.dart';
-import 'summary_detail_screen.dart';
-import 'widgets/analyzing_screen.dart';
+import 'summarized_audio_detail_screen.dart';
+import 'widgets/summarization_flow.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
 
@@ -56,14 +57,17 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
   bool _isLoading = true;
 
   final Map<String, Duration?> _durationCache = {};
+  final Map<String, SummarizedAudio> _summariesMap = {}; // Track summaries by file path
 
   String? _effectiveUid;
   late final VoidCallback _libraryListener;
+  late final VoidCallback _summariesListener;
 
   _SortMode _sortMode = _SortMode.timeDesc;
   _SourceFilter _sourceFilter = _SourceFilter.all;
 
   late final AudioPlayer _audioPlayer;
+  late final ApiService _apiService;
   String? _playingFilePath;
   String? _loadedFilePath;
   String? _expandedFilePath;
@@ -72,30 +76,11 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
   Duration _duration = Duration.zero;
   Duration _position = Duration.zero;
 
-  static const Map<String, String> _summarizeContextOptions = {
-    '1': 'Medical consultation',
-    '2': 'Business meeting',
-    '3': 'Interview',
-    '4': 'Lecture / class',
-    '5': 'Personal note',
-    '6': 'Legal / official',
-    '7': 'Other',
-  };
-
-  static const Map<String, IconData> _summarizeContextIcons = {
-    '1': Icons.medical_services_rounded,
-    '2': Icons.business_center_rounded,
-    '3': Icons.mic_rounded,
-    '4': Icons.school_rounded,
-    '5': Icons.sticky_note_2_rounded,
-    '6': Icons.gavel_rounded,
-    '7': Icons.auto_awesome_rounded,
-  };
-
   @override
   void initState() {
     super.initState();
     _audioPlayer = AudioPlayer();
+    _apiService = ApiService();
     _audioPlayer.durationStream.listen((duration) {
       setState(() => _duration = duration ?? Duration.zero);
     });
@@ -108,6 +93,12 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
       unawaited(_loadRecordings());
     };
     RecordingsLibraryEvents.revision.addListener(_libraryListener);
+
+    _summariesListener = () {
+      if (!mounted) return;
+      unawaited(_loadSummariesMap());
+    };
+    SummariesLibraryEvents.revision.addListener(_summariesListener);
 
     unawaited(_loadRecordings());
   }
@@ -131,7 +122,9 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
   @override
   void dispose() {
     RecordingsLibraryEvents.revision.removeListener(_libraryListener);
+    SummariesLibraryEvents.revision.removeListener(_summariesListener);
     _audioPlayer.dispose();
+    _apiService.dispose();
     super.dispose();
   }
 
@@ -141,347 +134,34 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
     return _RecordingSource.uploaded;
   }
 
-  Future<String?> _openSummarizeContextSheet(AuraThemeColors colors, String audioTitle) async {
-    HapticFeedback.lightImpact();
-
-    return showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (ctx) {
-        final sheetColors = AuraThemeColors.of(ctx);
-        return SafeArea(
-          top: false,
-          child: DraggableScrollableSheet(
-            initialChildSize: 0.70,
-            minChildSize: 0.55,
-            maxChildSize: 0.90,
-            builder: (context, scrollController) {
-              return Container(
-                decoration: BoxDecoration(
-                  color: sheetColors.surface,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(26),
-                    topRight: Radius.circular(26),
-                  ),
-                  border: Border.all(color: sheetColors.border),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const SizedBox(height: AuraSpacing.sm),
-                    Center(
-                      child: Container(
-                        width: 44,
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: sheetColors.border,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AuraSpacing.base,
-                        AuraSpacing.lg,
-                        AuraSpacing.base,
-                        AuraSpacing.sm,
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Select context',
-                              style: AuraTypography.titleLarge(sheetColors.textPrimary),
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () => Navigator.of(ctx).pop(),
-                            icon: Icon(Icons.close_rounded, color: sheetColors.iconDefault),
-                            tooltip: 'Close',
-                          ),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: AuraSpacing.base),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: sheetColors.surfaceElevated,
-                          borderRadius: AuraRadius.smBr,
-                          border: Border.all(color: sheetColors.border),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AuraSpacing.md,
-                          vertical: AuraSpacing.sm,
-                        ),
-                        child: Text(
-                          audioTitle,
-                          style: AuraTypography.bodyMedium(sheetColors.textPrimary)
-                              .copyWith(fontWeight: FontWeight.w600),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: AuraSpacing.sm),
-                    Expanded(
-                      child: ListView.separated(
-                        controller: scrollController,
-                        padding: const EdgeInsets.fromLTRB(
-                          AuraSpacing.base,
-                          AuraSpacing.sm,
-                          AuraSpacing.base,
-                          AuraSpacing.lg,
-                        ),
-                        itemCount: _summarizeContextOptions.length,
-                        separatorBuilder: (context, index) =>
-                            const SizedBox(height: AuraSpacing.sm),
-                        itemBuilder: (ctx, index) {
-                          final key = _summarizeContextOptions.keys.elementAt(index);
-                          final label = _summarizeContextOptions[key]!;
-                          final icon = _summarizeContextIcons[key] ?? Icons.circle;
-
-                          return Container(
-                            decoration: BoxDecoration(
-                              color: sheetColors.surface,
-                              borderRadius: AuraRadius.mdBr,
-                              border: Border.all(color: sheetColors.border),
-                              boxShadow: AuraElevation.low(Colors.black),
-                            ),
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                borderRadius: AuraRadius.mdBr,
-                                onTap: () {
-                                  HapticFeedback.selectionClick();
-                                  Navigator.of(ctx).pop(key);
-                                },
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: AuraSpacing.lg,
-                                    vertical: AuraSpacing.md,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: 36,
-                                        height: 36,
-                                        decoration: BoxDecoration(
-                                          color: sheetColors.surfaceElevated,
-                                          borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(color: sheetColors.border),
-                                        ),
-                                        alignment: Alignment.center,
-                                        child: Icon(
-                                          icon,
-                                          size: 20,
-                                          color: sheetColors.accent,
-                                        ),
-                                      ),
-                                      const SizedBox(width: AuraSpacing.md),
-                                      Expanded(
-                                        child: Text(
-                                          label,
-                                          style: AuraTypography.bodyLarge(sheetColors.textPrimary)
-                                              .copyWith(fontWeight: FontWeight.w600),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        );
-      },
-    );
-  }
-
-  Future<String?> _openSummarizeExtraDetailsSheet(AuraThemeColors colors, String audioTitle) async {
-    HapticFeedback.lightImpact();
-
-    return showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (ctx) {
-        final sheetColors = AuraThemeColors.of(ctx);
-        final controller = TextEditingController();
-
-        return SafeArea(
-          top: false,
-          child: Padding(
-            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-            child: Container(
-              decoration: BoxDecoration(
-                color: sheetColors.surface,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(26),
-                  topRight: Radius.circular(26),
-                ),
-                border: Border.all(color: sheetColors.border),
-              ),
-              padding: const EdgeInsets.fromLTRB(
-                AuraSpacing.base,
-                AuraSpacing.lg,
-                AuraSpacing.base,
-                AuraSpacing.lg,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Any extra detail?',
-                          style: AuraTypography.titleLarge(sheetColors.textPrimary),
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.of(ctx).pop(),
-                        icon: Icon(Icons.close_rounded, color: sheetColors.iconDefault),
-                        tooltip: 'Close',
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AuraSpacing.sm),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: sheetColors.surfaceElevated,
-                      borderRadius: AuraRadius.smBr,
-                      border: Border.all(color: sheetColors.border),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AuraSpacing.md,
-                      vertical: AuraSpacing.sm,
-                    ),
-                    child: Text(
-                      audioTitle,
-                      style: AuraTypography.bodyMedium(sheetColors.textPrimary)
-                          .copyWith(fontWeight: FontWeight.w600),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(height: AuraSpacing.md),
-                  TextField(
-                    controller: controller,
-                    maxLines: 3,
-                    minLines: 3,
-                    enableSuggestions: false,
-                    autocorrect: false,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: InputDecoration(
-                      hintText: 'Optional — add helpful notes for summarization',
-                      filled: true,
-                      fillColor: sheetColors.surface,
-                      border: OutlineInputBorder(
-                        borderRadius: AuraRadius.mdBr,
-                        borderSide: BorderSide(color: sheetColors.border),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: AuraRadius.mdBr,
-                        borderSide: BorderSide(color: sheetColors.border),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: AuraRadius.mdBr,
-                        borderSide: BorderSide(color: sheetColors.accent),
-                      ),
-                    ),
-                    style: AuraTypography.bodyMedium(sheetColors.textPrimary),
-                  ),
-                  const SizedBox(height: AuraSpacing.lg),
-                  ElevatedButton(
-                    onPressed: () {
-                      final text = controller.text.trim();
-                      Navigator.of(ctx).pop(text);
-                    },
-                    child: const Text('Continue'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   Future<void> _startSummarizeFlowForEntry(_RecordingEntry entry) async {
-    final colors = AuraThemeColors.of(context);
-    final title = _displayTitle(entry.fileName);
-    final uid = _effectiveUid;
+    final saved = await SummarizationFlow.summarizeAndOpen(
+      context: context,
+      apiService: _apiService,
+      uid: _effectiveUid,
+      audioPath: entry.file.path,
+      audioFileName: entry.fileName,
+    );
 
-    final existing = await SummariesStorage.load(uid);
-    final alreadyExists = existing.any((s) => s.filePath == entry.file.path);
-    if (alreadyExists) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('This audio is already in your summarized list.'),
-          backgroundColor: colors.surface,
-        ),
-      );
-      return;
+    if (!mounted) return;
+    if (saved == null) return;
+
+    setState(() => _summariesMap[saved.filePath] = saved);
+  }
+
+  Future<void> _loadSummariesMap() async {
+    final summaries = await SummariesStorage.load(_effectiveUid);
+    final next = <String, SummarizedAudio>{};
+    for (final s in summaries) {
+      next[s.filePath] = s;
     }
 
-    final contextKey = await _openSummarizeContextSheet(colors, title);
     if (!mounted) return;
-    if (contextKey == null || !_summarizeContextOptions.containsKey(contextKey)) return;
-
-    final extraDetails = await _openSummarizeExtraDetailsSheet(colors, title);
-    if (!mounted) return;
-    if (extraDetails == null) return;
-
-    final subtitle = extraDetails.isEmpty
-        ? _summarizeContextOptions[contextKey]!
-        : '${_summarizeContextOptions[contextKey]} • Using extra details';
-
-    await Navigator.of(context).push(
-      PageRouteBuilder(
-        pageBuilder: (ctx, a1, a2) => AnalyzingScreen(
-          title: 'Analyzing…',
-          subtitle: subtitle,
-        ),
-        transitionsBuilder: (ctx, animation, secondary, child) {
-          return FadeTransition(opacity: animation, child: child);
-        },
-        transitionDuration: AuraMotion.fast,
-      ),
-    );
-
-    final contextLabel = _summarizeContextOptions[contextKey]!;
-    final summaryText = extraDetails.isEmpty
-        ? 'Context: $contextLabel\n\nSummary will appear here later.'
-        : 'Context: $contextLabel\n\nSummary will appear here later.\n\n(Extra details were provided.)';
-
-    final newEntry = SummarizedAudio(
-      filePath: entry.file.path,
-      fileName: entry.fileName,
-      createdAtMs: DateTime.now().millisecondsSinceEpoch,
-      description: summaryText,
-    );
-
-    final next = [newEntry, ...existing];
-    await SummariesStorage.save(uid, next);
-    SummariesLibraryEvents.notifyChanged();
-
-    if (!mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (ctx) => SummaryDetailScreen(summary: newEntry),
-      ),
-    );
+    setState(() {
+      _summariesMap
+        ..clear()
+        ..addAll(next);
+    });
   }
 
 
@@ -547,10 +227,19 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
         );
       }
 
+      // Load summaries for all recordings
+      final summaries = await SummariesStorage.load(_effectiveUid);
+      final summariesMap = <String, SummarizedAudio>{};
+      for (final summary in summaries) {
+        summariesMap[summary.filePath] = summary;
+      }
+
       if (!mounted) return;
       setState(() {
         _allRecordings = entries;
         _isLoading = false;
+        _summariesMap.clear();
+        _summariesMap.addAll(summariesMap);
       });
 
       final newestFirst = [...entries]..sort((a, b) => b.modified.compareTo(a.modified));
@@ -1165,6 +854,9 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
                           colors,
                         ),
                         onSummarize: () => _startSummarizeFlowForEntry(entry),
+                        onViewSummary: _summariesMap.containsKey(file.path)
+                            ? () => _viewStoredSummary(_summariesMap[file.path]!)
+                            : null,
                       )
                     : const SizedBox.shrink(),
               ),
@@ -1172,6 +864,16 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
           ),
         );
       },
+    );
+  }
+
+  void _viewStoredSummary(SummarizedAudio summary) {
+    HapticFeedback.lightImpact();
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SummarizedAudioDetailScreen(summary: summary),
+      ),
     );
   }
 
@@ -1226,6 +928,7 @@ class _InlinePlayer extends StatelessWidget {
     required this.onSkipForward,
     required this.onDelete,
     this.onSummarize,
+    this.onViewSummary,
   });
 
   final AuraThemeColors colors;
@@ -1242,6 +945,7 @@ class _InlinePlayer extends StatelessWidget {
   final VoidCallback onSkipForward;
   final VoidCallback onDelete;
   final VoidCallback? onSummarize;
+  final VoidCallback? onViewSummary;
 
   @override
   Widget build(BuildContext context) {
@@ -1347,12 +1051,21 @@ class _InlinePlayer extends StatelessWidget {
                 icon: skipText('+15'),
                 tooltip: 'Forward 15s',
               ),
-              IconButton(
-                onPressed: onSummarize ?? () {},
-                icon: Icon(Icons.auto_awesome_rounded, color: colors.accent),
-                iconSize: 28,
-                tooltip: 'Summarize (coming soon)',
-              ),
+              // Show either "View Summary" or "Summarize" button
+              if (onViewSummary != null)
+                IconButton(
+                  onPressed: onViewSummary,
+                  icon: Icon(Icons.visibility_rounded, color: colors.accent),
+                  iconSize: 28,
+                  tooltip: 'View Summary',
+                )
+              else
+                IconButton(
+                  onPressed: onSummarize ?? () {},
+                  icon: Icon(Icons.auto_awesome_rounded, color: colors.accent),
+                  iconSize: 28,
+                  tooltip: 'Summarize',
+                ),
             ],
           ),
         ],

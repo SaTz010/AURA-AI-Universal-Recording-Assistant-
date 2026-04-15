@@ -47,6 +47,7 @@ dependencies:
   flutter_svg: ^2.2.0
   pdf: ^3.10.8
   share_plus: ^10.0.2
+  dio: ^5.3.0
 
 
 dev_dependencies:

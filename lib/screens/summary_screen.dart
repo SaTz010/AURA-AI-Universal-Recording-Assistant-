@@ -5,11 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../providers/auth_provider.dart';
+import '../services/api_service.dart';
 import '../services/recordings_storage.dart';
 import '../services/summaries_library_events.dart';
 import '../services/summaries_storage.dart';
-import 'summary_detail_screen.dart';
-import 'widgets/analyzing_screen.dart';
+import 'summarized_audio_detail_screen.dart';
+import 'widgets/summarization_flow.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
 
@@ -35,6 +36,8 @@ class SummaryScreen extends StatefulWidget {
 class _SummaryScreenState extends State<SummaryScreen> {
   String? _effectiveUid;
 
+  late final ApiService _apiService;
+
   late final VoidCallback _summariesListener;
 
   bool _isLoadingRecordings = true;
@@ -44,29 +47,11 @@ class _SummaryScreenState extends State<SummaryScreen> {
 
   _AudioChoice? _selected;
 
-  static const Map<String, String> _contextOptions = {
-    '1': 'Medical consultation',
-    '2': 'Business meeting',
-    '3': 'Interview',
-    '4': 'Lecture / class',
-    '5': 'Personal note',
-    '6': 'Legal / official',
-    '7': 'Other',
-  };
-
-  static const Map<String, IconData> _contextIcons = {
-    '1': Icons.medical_services_rounded,
-    '2': Icons.business_center_rounded,
-    '3': Icons.mic_rounded,
-    '4': Icons.school_rounded,
-    '5': Icons.sticky_note_2_rounded,
-    '6': Icons.gavel_rounded,
-    '7': Icons.auto_awesome_rounded,
-  };
-
   @override
   void initState() {
     super.initState();
+
+    _apiService = ApiService();
 
     _summariesListener = () {
       if (!mounted) return;
@@ -80,6 +65,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
   @override
   void dispose() {
     SummariesLibraryEvents.revision.removeListener(_summariesListener);
+    _apiService.dispose();
     super.dispose();
   }
 
@@ -411,359 +397,34 @@ class _SummaryScreenState extends State<SummaryScreen> {
     return match.first;
   }
 
-  Future<String?> _openContextSheet(AuraThemeColors colors, _AudioChoice selected) async {
-    HapticFeedback.lightImpact();
-
-    return showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (ctx) {
-        final sheetColors = AuraThemeColors.of(ctx);
-        return SafeArea(
-          top: false,
-          child: DraggableScrollableSheet(
-            initialChildSize: 0.70,
-            minChildSize: 0.55,
-            maxChildSize: 0.90,
-            builder: (context, scrollController) {
-              return Container(
-                decoration: BoxDecoration(
-                  color: sheetColors.surface,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(26),
-                    topRight: Radius.circular(26),
-                  ),
-                  border: Border.all(color: sheetColors.border),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const SizedBox(height: AuraSpacing.sm),
-                    Center(
-                      child: Container(
-                        width: 44,
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: sheetColors.border,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AuraSpacing.base,
-                        AuraSpacing.lg,
-                        AuraSpacing.base,
-                        AuraSpacing.sm,
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Select context',
-                              style: AuraTypography.titleLarge(sheetColors.textPrimary),
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () => Navigator.of(ctx).pop(),
-                            icon: Icon(Icons.close_rounded, color: sheetColors.iconDefault),
-                            tooltip: 'Close',
-                          ),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: AuraSpacing.base),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: sheetColors.surfaceElevated,
-                          borderRadius: AuraRadius.smBr,
-                          border: Border.all(color: sheetColors.border),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AuraSpacing.md,
-                          vertical: AuraSpacing.sm,
-                        ),
-                        child: Text(
-                          _displayTitle(selected.fileName),
-                          style: AuraTypography.bodyMedium(sheetColors.textPrimary).copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: AuraSpacing.sm),
-                    Expanded(
-                      child: ListView.separated(
-                        controller: scrollController,
-                        padding: const EdgeInsets.fromLTRB(
-                          AuraSpacing.base,
-                          AuraSpacing.sm,
-                          AuraSpacing.base,
-                          AuraSpacing.lg,
-                        ),
-                        itemCount: _contextOptions.length,
-                        separatorBuilder: (context, index) =>
-                            const SizedBox(height: AuraSpacing.sm),
-                        itemBuilder: (ctx, index) {
-                          final key = _contextOptions.keys.elementAt(index);
-                          final label = _contextOptions[key]!;
-                          final icon = _contextIcons[key] ?? Icons.circle;
-
-                          return Container(
-                            decoration: BoxDecoration(
-                              color: sheetColors.surface,
-                              borderRadius: AuraRadius.mdBr,
-                              border: Border.all(color: sheetColors.border),
-                              boxShadow: AuraElevation.low(Colors.black),
-                            ),
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                borderRadius: AuraRadius.mdBr,
-                                onTap: () {
-                                  HapticFeedback.selectionClick();
-                                  Navigator.of(ctx).pop(key);
-                                },
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: AuraSpacing.lg,
-                                    vertical: AuraSpacing.md,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: 36,
-                                        height: 36,
-                                        decoration: BoxDecoration(
-                                          color: sheetColors.surfaceElevated,
-                                          borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(color: sheetColors.border),
-                                        ),
-                                        alignment: Alignment.center,
-                                        child: Icon(
-                                          icon,
-                                          size: 20,
-                                          color: sheetColors.accent,
-                                        ),
-                                      ),
-                                      const SizedBox(width: AuraSpacing.md),
-                                      Expanded(
-                                        child: Text(
-                                          label,
-                                          style: AuraTypography.bodyLarge(sheetColors.textPrimary)
-                                              .copyWith(fontWeight: FontWeight.w600),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        );
-      },
-    );
-  }
-
-  Future<String?> _openExtraDetailsSheet(AuraThemeColors colors, _AudioChoice selected) async {
-    HapticFeedback.lightImpact();
-
-    return showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (ctx) {
-        final sheetColors = AuraThemeColors.of(ctx);
-        final controller = TextEditingController();
-
-        return SafeArea(
-          top: false,
-          child: Padding(
-            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-            child: Container(
-              decoration: BoxDecoration(
-                color: sheetColors.surface,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(26),
-                  topRight: Radius.circular(26),
-                ),
-                border: Border.all(color: sheetColors.border),
-              ),
-              padding: const EdgeInsets.fromLTRB(
-                AuraSpacing.base,
-                AuraSpacing.lg,
-                AuraSpacing.base,
-                AuraSpacing.lg,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Any extra detail?',
-                          style: AuraTypography.titleLarge(sheetColors.textPrimary),
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () => Navigator.of(ctx).pop(),
-                        icon: Icon(Icons.close_rounded, color: sheetColors.iconDefault),
-                        tooltip: 'Close',
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AuraSpacing.sm),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: sheetColors.surfaceElevated,
-                      borderRadius: AuraRadius.smBr,
-                      border: Border.all(color: sheetColors.border),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AuraSpacing.md,
-                      vertical: AuraSpacing.sm,
-                    ),
-                    child: Text(
-                      _displayTitle(selected.fileName),
-                      style: AuraTypography.bodyMedium(sheetColors.textPrimary)
-                          .copyWith(fontWeight: FontWeight.w600),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(height: AuraSpacing.md),
-                  TextField(
-                    controller: controller,
-                    maxLines: 3,
-                    minLines: 3,
-                    enableSuggestions: false,
-                    autocorrect: false,
-                    textCapitalization: TextCapitalization.sentences,
-                    decoration: InputDecoration(
-                      hintText: 'Optional — add helpful notes for summarization',
-                      filled: true,
-                      fillColor: sheetColors.surface,
-                      border: OutlineInputBorder(
-                        borderRadius: AuraRadius.mdBr,
-                        borderSide: BorderSide(color: sheetColors.border),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: AuraRadius.mdBr,
-                        borderSide: BorderSide(color: sheetColors.border),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: AuraRadius.mdBr,
-                        borderSide: BorderSide(color: sheetColors.accent),
-                      ),
-                    ),
-                    style: AuraTypography.bodyMedium(sheetColors.textPrimary),
-                  ),
-                  const SizedBox(height: AuraSpacing.lg),
-                  ElevatedButton(
-                    onPressed: () {
-                      final text = controller.text.trim();
-                      Navigator.of(ctx).pop(text);
-                    },
-                    child: const Text('Continue'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   Future<void> _startSummarizeFlow(AuraThemeColors colors) async {
     final selected = await _openChooseSheet(colors);
     if (!mounted) return;
     if (selected == null) return;
 
-    final alreadyExists = _summaries.any((s) => s.filePath == selected.filePath);
-    if (alreadyExists) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('This audio is already in your summarized list.'),
-          backgroundColor: colors.surface,
+    setState(() => _selected = selected);
+
+    final already = _summaries.where((s) => s.filePath == selected.filePath).firstOrNull;
+    if (already != null) {
+      setState(() => _selected = null);
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => SummarizedAudioDetailScreen(summary: already),
         ),
       );
       return;
     }
 
-    setState(() => _selected = selected);
-
-    final contextKey = await _openContextSheet(colors, selected);
-    if (!mounted) return;
-    if (contextKey == null || !_contextOptions.containsKey(contextKey)) {
-      return;
-    }
-
-    final extraDetails = await _openExtraDetailsSheet(colors, selected);
-    if (!mounted) return;
-    if (extraDetails == null) {
-      return;
-    }
-
-    await Navigator.of(context).push(
-      PageRouteBuilder(
-        pageBuilder: (ctx, a1, a2) => AnalyzingScreen(
-          title: 'Analyzing…',
-          subtitle: extraDetails.isEmpty
-              ? _contextOptions[contextKey]!
-              : '${_contextOptions[contextKey]} • Using extra details',
-        ),
-        transitionsBuilder: (ctx, animation, secondary, child) {
-          return FadeTransition(opacity: animation, child: child);
-        },
-        transitionDuration: AuraMotion.fast,
-      ),
+    await SummarizationFlow.summarizeAndOpen(
+      context: context,
+      apiService: _apiService,
+      uid: _effectiveUid,
+      audioPath: selected.filePath,
+      audioFileName: selected.fileName,
     );
 
-    final contextLabel = _contextOptions[contextKey]!;
-    final summaryText = extraDetails.isEmpty
-        ? 'Context: $contextLabel\n\nSummary will appear here later.'
-        : 'Context: $contextLabel\n\nSummary will appear here later.\n\n(Extra details were provided.)';
-
-    final entry = SummarizedAudio(
-      filePath: selected.filePath,
-      fileName: selected.fileName,
-      createdAtMs: DateTime.now().millisecondsSinceEpoch,
-      description: summaryText,
-    );
-
-    final next = [entry, ..._summaries];
-    setState(() {
-      _summaries = next;
-      _selected = null;
-    });
-
-    try {
-      await SummariesStorage.save(_effectiveUid, next);
-      SummariesLibraryEvents.notifyChanged();
-    } catch (_) {
-      // ignore persistence failures for now
-    }
-
     if (!mounted) return;
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (ctx) => SummaryDetailScreen(summary: entry),
-      ),
-    );
+    setState(() => _selected = null);
   }
 
   @override
@@ -903,59 +564,73 @@ class _SummaryScreenState extends State<SummaryScreen> {
                             final s = _summaries[index];
                             final title = _displayTitle(s.fileName);
                             final createdAt = DateTime.fromMillisecondsSinceEpoch(s.createdAtMs);
-                            return Container(
-                              decoration: BoxDecoration(
-                                color: colors.surface,
+                            return Material(
+                              color: Colors.transparent,
+                              child: InkWell(
                                 borderRadius: AuraRadius.mdBr,
-                                border: Border.all(color: colors.border),
-                                boxShadow: AuraElevation.low(Colors.black),
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: AuraSpacing.lg,
-                                vertical: AuraSpacing.md,
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
+                                onTap: () {
+                                  HapticFeedback.lightImpact();
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => SummarizedAudioDetailScreen(summary: s),
+                                    ),
+                                  );
+                                },
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    color: colors.surface,
+                                    borderRadius: AuraRadius.mdBr,
+                                    border: Border.all(color: colors.border),
+                                    boxShadow: AuraElevation.low(Colors.black),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: AuraSpacing.lg,
+                                    vertical: AuraSpacing.md,
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              title,
-                                              style: AuraTypography.bodyLarge(colors.textPrimary)
-                                                  .copyWith(fontWeight: FontWeight.w600),
-                                              overflow: TextOverflow.ellipsis,
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  title,
+                                                  style: AuraTypography.bodyLarge(colors.textPrimary)
+                                                      .copyWith(fontWeight: FontWeight.w600),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                                const SizedBox(height: 4),
+                                                Text(
+                                                  _formatRelativeDateTime(createdAt),
+                                                  style: AuraTypography.caption(colors.textSecondary),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ],
                                             ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              _formatRelativeDateTime(createdAt),
-                                              style: AuraTypography.caption(colors.textSecondary),
-                                              overflow: TextOverflow.ellipsis,
+                                          ),
+                                          IconButton(
+                                            onPressed: () => _deleteSummaryAt(index),
+                                            icon: Icon(
+                                              Icons.delete_outline_rounded,
+                                              color: colors.iconDefault,
                                             ),
-                                          ],
-                                        ),
+                                            tooltip: 'Delete summary',
+                                          ),
+                                        ],
                                       ),
-                                      IconButton(
-                                        onPressed: () => _deleteSummaryAt(index),
-                                        icon: Icon(
-                                          Icons.delete_outline_rounded,
-                                          color: colors.iconDefault,
-                                        ),
-                                        tooltip: 'Delete summary',
+                                      const SizedBox(height: AuraSpacing.sm),
+                                      Text(
+                                        s.description,
+                                        style: AuraTypography.bodyMedium(colors.textSecondary),
+                                        maxLines: 3,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: AuraSpacing.sm),
-                                  Text(
-                                    s.description,
-                                    style: AuraTypography.bodyMedium(colors.textSecondary),
-                                    maxLines: 3,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
+                                ),
                               ),
                             );
                           },
@@ -965,6 +640,14 @@ class _SummaryScreenState extends State<SummaryScreen> {
         ),
       ),
     );
+  }
+}
+
+extension _IterableFirstOrNull<E> on Iterable<E> {
+  E? get firstOrNull {
+    final it = iterator;
+    if (!it.moveNext()) return null;
+    return it.current;
   }
 }
 

@@ -6,10 +6,15 @@ import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../../providers/auth_provider.dart';
+import '../../services/api_service.dart';
 import '../../services/recordings_library_events.dart';
 import '../../services/recordings_storage.dart';
+import '../../services/summaries_library_events.dart';
+import '../../services/summaries_storage.dart';
 import '../../theme/aura_theme.dart';
 import '../../theme/aura_tokens.dart';
+import '../summarized_audio_detail_screen.dart';
+import 'summarization_flow.dart';
 
 class DashboardLowerContent extends StatelessWidget {
   const DashboardLowerContent({
@@ -155,6 +160,10 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
 
   String? _effectiveUid;
   late final VoidCallback _libraryListener;
+  late final VoidCallback _summariesListener;
+
+  late final ApiService _apiService;
+  Map<String, SummarizedAudio> _summariesByPath = const {};
 
   late final AudioPlayer _audioPlayer;
   String? _expandedFilePath;
@@ -166,6 +175,7 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
   @override
   void initState() {
     super.initState();
+    _apiService = ApiService();
     _audioPlayer = AudioPlayer();
     _audioPlayer.durationStream.listen((duration) {
       if (!mounted) return;
@@ -181,7 +191,15 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
       unawaited(_load());
     };
     RecordingsLibraryEvents.revision.addListener(_libraryListener);
+
+    _summariesListener = () {
+      if (!mounted) return;
+      unawaited(_loadSummaries());
+    };
+    SummariesLibraryEvents.revision.addListener(_summariesListener);
+
     _load();
+    _loadSummaries();
   }
 
   @override
@@ -193,14 +211,37 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
     _effectiveUid = nextUid;
     _isLoading = true;
     _items = const [];
+    _summariesByPath = const {};
     unawaited(_load());
+    unawaited(_loadSummaries());
   }
 
   @override
   void dispose() {
     RecordingsLibraryEvents.revision.removeListener(_libraryListener);
+    SummariesLibraryEvents.revision.removeListener(_summariesListener);
     _audioPlayer.dispose();
+    _apiService.dispose();
     super.dispose();
+  }
+
+  String _fileNameFromPath(String path) {
+    return path.split(RegExp(r'[\\/]')).last;
+  }
+
+  Future<void> _loadSummaries() async {
+    try {
+      final list = await SummariesStorage.load(_effectiveUid);
+      if (!mounted) return;
+      setState(() {
+        _summariesByPath = {
+          for (final s in list) s.filePath: s,
+        };
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _summariesByPath = const {});
+    }
   }
 
   Future<void> _load() async {
@@ -261,6 +302,71 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
         _isLoading = false;
       });
     }
+  }
+
+  Widget _buildRecentTile(AuraThemeColors colors, int index) {
+    final item = _items[index];
+    final existingSummary = _summariesByPath[item.filePath];
+
+    return _RecentExpandableTile(
+      colors: colors,
+      data: item,
+      isExpanded: _expandedFilePath == item.filePath,
+      isActive: _loadedFilePath == item.filePath,
+      isPlaying: _loadedFilePath == item.filePath && _audioPlayer.playing,
+      isPreparing: _isPreparing && _loadedFilePath != item.filePath,
+      position: _loadedFilePath == item.filePath ? _position : Duration.zero,
+      duration: _loadedFilePath == item.filePath ? _duration : Duration.zero,
+      onToggle: () {
+        HapticFeedback.selectionClick();
+        _toggleExpanded(item.filePath);
+      },
+      onOpenFull: widget.onFileTap == null
+          ? null
+          : () {
+              HapticFeedback.lightImpact();
+              widget.onFileTap?.call(item.filePath);
+            },
+      onPlayPause: () => _playPause(item.filePath),
+      onSeekToSeconds: (seconds) => _audioPlayer.seek(Duration(seconds: seconds)),
+      onSkipBack: () => _seekRelative(
+        item.filePath,
+        const Duration(seconds: -15),
+      ),
+      onSkipForward: () => _seekRelative(
+        item.filePath,
+        const Duration(seconds: 15),
+      ),
+      onViewSummary: existingSummary == null
+          ? null
+          : () {
+              HapticFeedback.lightImpact();
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => SummarizedAudioDetailScreen(summary: existingSummary),
+                ),
+              );
+            },
+      onSummarize: existingSummary != null
+          ? null
+          : () {
+              HapticFeedback.lightImpact();
+              unawaited(
+                SummarizationFlow.summarizeAndOpen(
+                  context: context,
+                  apiService: _apiService,
+                  uid: _effectiveUid,
+                  audioPath: item.filePath,
+                  audioFileName: _fileNameFromPath(item.filePath),
+                ),
+              );
+            },
+      onDelete: () => _showDeleteDialog(
+        colors,
+        item.title,
+        item.filePath,
+      ),
+    );
   }
 
   String _stripExtension(String fileName) {
@@ -500,42 +606,7 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
     return Column(
       children: [
         for (int i = 0; i < _items.length; i++) ...[
-          _RecentExpandableTile(
-            colors: colors,
-            data: _items[i],
-            isExpanded: _expandedFilePath == _items[i].filePath,
-            isActive: _loadedFilePath == _items[i].filePath,
-            isPlaying: _loadedFilePath == _items[i].filePath && _audioPlayer.playing,
-            isPreparing: _isPreparing && _loadedFilePath != _items[i].filePath,
-            position: _loadedFilePath == _items[i].filePath ? _position : Duration.zero,
-            duration: _loadedFilePath == _items[i].filePath ? _duration : Duration.zero,
-            onToggle: () {
-              HapticFeedback.selectionClick();
-              _toggleExpanded(_items[i].filePath);
-            },
-            onOpenFull: widget.onFileTap == null
-                ? null
-                : () {
-                    HapticFeedback.lightImpact();
-                    widget.onFileTap?.call(_items[i].filePath);
-                  },
-            onPlayPause: () => _playPause(_items[i].filePath),
-            onSeekToSeconds: (seconds) =>
-                _audioPlayer.seek(Duration(seconds: seconds)),
-            onSkipBack: () => _seekRelative(
-              _items[i].filePath,
-              const Duration(seconds: -15),
-            ),
-            onSkipForward: () => _seekRelative(
-              _items[i].filePath,
-              const Duration(seconds: 15),
-            ),
-            onDelete: () => _showDeleteDialog(
-              colors,
-              _items[i].title,
-              _items[i].filePath,
-            ),
-          ),
+          _buildRecentTile(colors, i),
           if (i != _items.length - 1) const SizedBox(height: AuraSpacing.sm),
         ],
       ],
@@ -559,6 +630,8 @@ class _RecentExpandableTile extends StatelessWidget {
     required this.onSeekToSeconds,
     required this.onSkipBack,
     required this.onSkipForward,
+    required this.onSummarize,
+    required this.onViewSummary,
     required this.onDelete,
   });
 
@@ -576,6 +649,8 @@ class _RecentExpandableTile extends StatelessWidget {
   final ValueChanged<int> onSeekToSeconds;
   final VoidCallback onSkipBack;
   final VoidCallback onSkipForward;
+  final VoidCallback? onSummarize;
+  final VoidCallback? onViewSummary;
   final VoidCallback onDelete;
 
   String _formatDuration(Duration duration) {
@@ -746,10 +821,15 @@ class _RecentExpandableTile extends StatelessWidget {
                               tooltip: 'Forward 15s',
                             ),
                             IconButton(
-                              onPressed: () {},
-                              icon: Icon(Icons.auto_awesome_rounded, color: colors.accent),
+                              onPressed: onViewSummary ?? onSummarize,
+                              icon: Icon(
+                                onViewSummary != null
+                                    ? Icons.visibility_rounded
+                                    : Icons.auto_awesome_rounded,
+                                color: colors.accent,
+                              ),
                               iconSize: 28,
-                              tooltip: 'Summarize (coming soon)',
+                              tooltip: onViewSummary != null ? 'View Summary' : 'Summarize',
                             ),
                           ],
                         ),

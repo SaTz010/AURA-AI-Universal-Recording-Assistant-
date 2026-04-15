@@ -9,18 +9,33 @@ class SummarizedAudio {
     required this.fileName,
     required this.createdAtMs,
     required this.description,
+    this.summary = '',
+    this.transcript = '',
+    this.translation,
+    this.cost = 0.0,
+    this.category = '',
   });
 
   final String filePath;
   final String fileName;
   final int createdAtMs;
   final String description;
+  final String summary;
+  final String transcript;
+  final String? translation;
+  final double cost;
+  final String category;
 
   Map<String, Object?> toJson() => {
         'filePath': filePath,
         'fileName': fileName,
         'createdAtMs': createdAtMs,
         'description': description,
+        'summary': summary,
+        'transcript': transcript,
+        'translation': translation,
+        'cost': cost,
+        'category': category,
       };
 
   static SummarizedAudio? fromJson(Object? raw) {
@@ -36,12 +51,41 @@ class SummarizedAudio {
     if (createdAtMs is! int) return null;
     if (description is! String) return null;
 
+    // Optional response data fields for backward compatibility
+    final summary = raw['summary'] as String? ?? '';
+    final transcript = raw['transcript'] as String? ?? '';
+    final translation = raw['translation'] as String?;
+    final cost = _readCost(raw);
+    final category = raw['category'] as String? ?? '';
+
     return SummarizedAudio(
       filePath: filePath,
       fileName: fileName,
       createdAtMs: createdAtMs,
       description: description,
+      summary: summary,
+      transcript: transcript,
+      translation: translation,
+      cost: cost,
+      category: category,
     );
+  }
+
+  static double _readCost(dynamic json) {
+    if (json is! Map) return 0.0;
+    final value = json['cost'];
+    if (value == null) return 0.0;
+    if (value is num) return value.toDouble();
+    if (value is String) {
+      return double.tryParse(value) ?? 0.0;
+    }
+    if (value is Map) {
+      final numeric = value['usd'] ?? value['total'] ?? value['value'] ?? 
+                      value['amount'] ?? value['cost'] ?? value['total_cost'];
+      if (numeric is num) return numeric.toDouble();
+      if (numeric is String) return double.tryParse(numeric) ?? 0.0;
+    }
+    return 0.0;
   }
 }
 
