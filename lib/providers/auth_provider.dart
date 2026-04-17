@@ -1,4 +1,5 @@
 import 'dart:developer' as developer;
+import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -18,6 +19,8 @@ class AuthProvider extends ChangeNotifier {
   User? _user;
   Map<String, String> _cachedUser = const {};
 
+  StreamSubscription<User?>? _authStateSub;
+
   bool get initialized => _initialized;
   bool get isLoading => _isLoading;
   bool get isAuthenticated => _user != null;
@@ -27,6 +30,18 @@ class AuthProvider extends ChangeNotifier {
   Map<String, String> get cachedUser => _cachedUser;
 
   Future<void> initialize() async {
+    // Cancel any previous subscription (defensive, in case initialize is called twice).
+    await _authStateSub?.cancel();
+    _authStateSub = FirebaseAuth.instance.authStateChanges().listen(
+      (user) {
+        unawaited(_handleAuthUserChanged(user));
+      },
+      onError: (Object error, StackTrace stack) {
+        developer.log('Auth state stream error: $error');
+      },
+    );
+
+    // Seed state with whatever Firebase has synchronously right now.
     _user = _authService.currentUser;
     _cachedUser = await _authService.getCachedUserData();
 
@@ -36,6 +51,23 @@ class AuthProvider extends ChangeNotifier {
     }
 
     _initialized = true;
+    notifyListeners();
+  }
+
+  Future<void> _handleAuthUserChanged(User? user) async {
+    // Always update; this is what downstream screens use for per-user storage.
+    _user = user;
+
+    // If we have a signed-in (non-anonymous) user, refresh cached profile info.
+    if (user != null && user.isAnonymous == false) {
+      try {
+        await _authService.cacheUserData(user);
+        _cachedUser = await _authService.getCachedUserData();
+      } catch (_) {
+        // Cache refresh is best-effort; don't block auth state updates.
+      }
+    }
+
     notifyListeners();
   }
 
@@ -118,6 +150,13 @@ class AuthProvider extends ChangeNotifier {
     } finally {
       _setLoading(false);
     }
+  }
+
+  @override
+  void dispose() {
+    _authStateSub?.cancel();
+    _authStateSub = null;
+    super.dispose();
   }
 
   void clearError() {

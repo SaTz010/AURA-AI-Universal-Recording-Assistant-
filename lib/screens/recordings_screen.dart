@@ -60,6 +60,7 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
   final Map<String, SummarizedAudio> _summariesMap = {}; // Track summaries by file path
 
   String? _effectiveUid;
+  bool _hasLoadedOnce = false;
   late final VoidCallback _libraryListener;
   late final VoidCallback _summariesListener;
 
@@ -99,22 +100,27 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
       unawaited(_loadSummariesMap());
     };
     SummariesLibraryEvents.revision.addListener(_summariesListener);
-
-    unawaited(_loadRecordings());
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final authProvider = AuraAuthProvider.of(context);
+    if (!authProvider.initialized) return;
     final nextUid = authProvider.isGuest ? null : authProvider.user?.uid;
-    if (nextUid == _effectiveUid) return;
+    final didUserChange = nextUid != _effectiveUid;
+    if (!didUserChange && _hasLoadedOnce) return;
 
     _effectiveUid = nextUid;
-    _durationCache.clear();
-    _loadedFilePath = null;
-    _expandedFilePath = null;
-    _playingFilePath = null;
+    _hasLoadedOnce = true;
+
+    if (didUserChange) {
+      _durationCache.clear();
+      _loadedFilePath = null;
+      _expandedFilePath = null;
+      _playingFilePath = null;
+    }
+
     _isLoading = true;
     unawaited(_loadRecordings());
   }

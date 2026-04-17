@@ -2,13 +2,13 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:audio_waveforms/audio_waveforms.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../services/recordings_library_events.dart';
 import '../services/recordings_storage.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
+import '../providers/auth_provider.dart';
 
 class RecordingSessionScreen extends StatefulWidget {
   const RecordingSessionScreen({super.key});
@@ -22,7 +22,8 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
   final Stopwatch _recordingStopwatch = Stopwatch();
   final RecorderController _recorderController = RecorderController();
 
-  late final String? _effectiveUid;
+  String? _effectiveUid;
+  bool _hasStarted = false;
 
   static const RecorderSettings _speechRecorderSettings = RecorderSettings(
     sampleRate: 16000,
@@ -43,7 +44,6 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
   @override
   void initState() {
     super.initState();
-    _effectiveUid = FirebaseAuth.instance.currentUser?.uid;
     WidgetsBinding.instance.addObserver(this);
     _ticker = Timer.periodic(const Duration(milliseconds: 200), (_) {
       if (!mounted) return;
@@ -52,6 +52,20 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
         _elapsedDuration = _recordingStopwatch.elapsed;
       });
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    final authProvider = AuraAuthProvider.of(context);
+    if (!authProvider.initialized) return;
+
+    final nextUid = authProvider.isGuest ? null : authProvider.user?.uid;
+    _effectiveUid = nextUid;
+
+    if (_hasStarted) return;
+    _hasStarted = true;
     unawaited(_startRecordingSession());
   }
 

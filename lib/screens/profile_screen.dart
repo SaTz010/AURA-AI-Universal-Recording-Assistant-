@@ -5,6 +5,7 @@ import '../providers/auth_provider.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
 import 'widgets/total_recorded_stat.dart';
+import 'widgets/total_summaries_stat.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -114,31 +115,7 @@ class ProfileScreen extends StatelessWidget {
             const SizedBox(height: AuraSpacing.xl),
             const _SectionHeader(title: 'Current plan'),
             const SizedBox(height: AuraSpacing.sm),
-            GridView.count(
-              crossAxisCount: 2,
-              crossAxisSpacing: AuraSpacing.sm,
-              mainAxisSpacing: AuraSpacing.sm,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              childAspectRatio: 2.35,
-              children: const [
-                _PlanMiniCard(
-                  icon: Icons.workspace_premium_rounded,
-                  label: 'Tier',
-                  value: 'Free',
-                ),
-                _PlanMiniCard(
-                  icon: Icons.event_available_rounded,
-                  label: 'Time remaining',
-                  value: '14 days',
-                ),
-                _PlanMiniCard(
-                  icon: Icons.auto_awesome_rounded,
-                  label: 'Summaries left',
-                  value: '12',
-                ),
-              ],
-            ),
+            const _ComingSoonCard(),
             const SizedBox(height: AuraSpacing.xl),
             const _SectionHeader(title: 'Recordings'),
             const SizedBox(height: AuraSpacing.sm),
@@ -146,7 +123,7 @@ class ProfileScreen extends StatelessWidget {
             const SizedBox(height: AuraSpacing.xl),
             const _SectionHeader(title: 'Summary'),
             const SizedBox(height: AuraSpacing.sm),
-            const _ComingSoonCard(),
+            const SummaryTotalsCard(),
           ],
         ),
       ),
@@ -250,69 +227,6 @@ class _SectionHeader extends StatelessWidget {
       title,
       style: AuraTypography.titleMedium(colors.textPrimary).copyWith(
         fontWeight: FontWeight.w800,
-      ),
-    );
-  }
-}
-
-class _PlanMiniCard extends StatelessWidget {
-  const _PlanMiniCard({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AuraThemeColors.of(context);
-
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: AuraRadius.lgBr,
-        border: Border.all(color: colors.border),
-        boxShadow: AuraElevation.low(Colors.black),
-      ),
-      padding: const EdgeInsets.all(AuraSpacing.md),
-      child: Row(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: colors.surfaceElevated,
-              border: Border.all(color: colors.border),
-            ),
-            child: Icon(icon, size: 18, color: colors.accent),
-          ),
-          const SizedBox(width: AuraSpacing.sm),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: AuraTypography.caption(colors.textSecondary),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  value,
-                  style: AuraTypography.titleMedium(colors.textPrimary).copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

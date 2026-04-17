@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../../providers/auth_provider.dart';
+import '../../services/recordings_library_events.dart';
 import '../../services/recordings_storage.dart';
 import '../../theme/aura_theme.dart';
 import '../../theme/aura_tokens.dart';
@@ -17,6 +18,8 @@ class RecordingTotalsCards extends StatefulWidget {
 }
 
 class _RecordingTotalsCardsState extends State<RecordingTotalsCards> {
+  static final Map<String, _RecordingTotalsSnapshot> _cacheByUidKey = {};
+
   bool _isLoading = true;
   int _recordingsCount = 0;
   int _durationsResolved = 0;
@@ -25,10 +28,21 @@ class _RecordingTotalsCardsState extends State<RecordingTotalsCards> {
 
   String? _effectiveUid;
 
+  late final VoidCallback _revisionListener;
+
   @override
   void initState() {
     super.initState();
-    _load();
+
+    _restoreFromCache();
+
+    _revisionListener = () {
+      if (!mounted) return;
+      unawaited(_load(showLoading: false));
+    };
+    RecordingsLibraryEvents.revision.addListener(_revisionListener);
+
+    unawaited(_loadIfStale());
   }
 
   @override
@@ -38,11 +52,54 @@ class _RecordingTotalsCardsState extends State<RecordingTotalsCards> {
     final nextUid = authProvider.isGuest ? null : authProvider.user?.uid;
     if (nextUid == _effectiveUid) return;
     _effectiveUid = nextUid;
-    unawaited(_load());
+
+    _restoreFromCache();
+    unawaited(_loadIfStale());
   }
 
-  Future<void> _load() async {
-    if (mounted) {
+  @override
+  void dispose() {
+    RecordingsLibraryEvents.revision.removeListener(_revisionListener);
+    super.dispose();
+  }
+
+  String _uidKey() {
+    final normalized = _effectiveUid?.trim();
+    return (normalized == null || normalized.isEmpty) ? '_guest' : normalized;
+  }
+
+  void _restoreFromCache() {
+    final snapshot = _cacheByUidKey[_uidKey()];
+    if (snapshot == null) return;
+
+    if (!mounted) return;
+    setState(() {
+      _recordingsCount = snapshot.recordingsCount;
+      _durationsResolved = snapshot.durationsResolved;
+      _totalRecorded = snapshot.totalRecorded;
+      _latestTimestamp = snapshot.latestTimestamp;
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _loadIfStale() async {
+    final key = _uidKey();
+    final currentRevision = RecordingsLibraryEvents.revision.value;
+    final cached = _cacheByUidKey[key];
+
+    if (cached != null && cached.revision == currentRevision && cached.isValid) {
+      if (_isLoading) {
+        _restoreFromCache();
+      }
+      return;
+    }
+
+    final shouldShowLoading = cached == null;
+    await _load(showLoading: shouldShowLoading);
+  }
+
+  Future<void> _load({required bool showLoading}) async {
+    if (mounted && showLoading) {
       setState(() => _isLoading = true);
     }
 
@@ -85,6 +142,16 @@ class _RecordingTotalsCardsState extends State<RecordingTotalsCards> {
       }
 
       if (!mounted) return;
+      final revision = RecordingsLibraryEvents.revision.value;
+      _cacheByUidKey[_uidKey()] = _RecordingTotalsSnapshot(
+        revision: revision,
+        recordingsCount: files.length,
+        durationsResolved: resolved,
+        totalRecorded: total,
+        latestTimestamp: latest,
+        isValid: true,
+      );
+
       setState(() {
         _recordingsCount = files.length;
         _durationsResolved = resolved;
@@ -94,6 +161,15 @@ class _RecordingTotalsCardsState extends State<RecordingTotalsCards> {
       });
     } catch (_) {
       if (!mounted) return;
+      _cacheByUidKey[_uidKey()] = _RecordingTotalsSnapshot(
+        revision: RecordingsLibraryEvents.revision.value,
+        recordingsCount: 0,
+        durationsResolved: 0,
+        totalRecorded: Duration.zero,
+        latestTimestamp: null,
+        isValid: false,
+      );
+
       setState(() {
         _recordingsCount = 0;
         _durationsResolved = 0;
@@ -191,6 +267,24 @@ class _RecordingTotalsCardsState extends State<RecordingTotalsCards> {
       ],
     );
   }
+}
+
+class _RecordingTotalsSnapshot {
+  const _RecordingTotalsSnapshot({
+    required this.revision,
+    required this.recordingsCount,
+    required this.durationsResolved,
+    required this.totalRecorded,
+    required this.latestTimestamp,
+    required this.isValid,
+  });
+
+  final int revision;
+  final int recordingsCount;
+  final int durationsResolved;
+  final Duration totalRecorded;
+  final DateTime? latestTimestamp;
+  final bool isValid;
 }
 
 class _MiniStatCard extends StatelessWidget {

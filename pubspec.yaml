@@ -65,9 +65,10 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "C:\\Users\\ADMIN\\OneDrive\\Desktop\\Last Year\\FYP\\AURA(Ai Universal Recording Assistant)\\Codebase\\aura\\assets\\images\\A.png"
+  image_path: assets/images/aura_logo.png
   adaptive_icon_background: "#202020"
-  adaptive_icon_foreground: "C:\\Users\\ADMIN\\OneDrive\\Desktop\\Last Year\\FYP\\AURA(Ai Universal Recording Assistant)\\Codebase\\aura\\assets\\images\\A.png"
+  adaptive_icon_foreground: assets/images/aura_logo.png
+  remove_alpha_ios: true
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
