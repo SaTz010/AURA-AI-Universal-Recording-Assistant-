@@ -48,6 +48,7 @@ dependencies:
   pdf: ^3.10.8
   share_plus: ^10.0.2
   dio: ^5.3.0
+  file_picker: ^8.1.7
 
 
 dev_dependencies:

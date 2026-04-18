@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'screens/auth_screen.dart';
 import 'screens/initial_animation.dart';
+import 'screens/history_screen.dart';
 import 'screens/legal_screen.dart';
 import 'screens/placeholder_screen.dart';
-import 'screens/profile_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/main_tabs_screen.dart';
 import 'providers/auth_provider.dart';
@@ -74,11 +74,11 @@ class _MyAppState extends State<MyApp> {
               routes: {
                 '/auth': (context) => const AuraAuthScreen(),
                 '/home': (context) => const MainTabsScreen(initialIndex: 0),
-                '/profile': (context) => const ProfileScreen(),
-                '/summary': (context) => const MainTabsScreen(initialIndex: 3),
+                '/profile': (context) => const MainTabsScreen(initialIndex: 3),
+                '/summary': (context) => const MainTabsScreen(initialIndex: 2),
                 '/recordings': (context) => const MainTabsScreen(initialIndex: 1),
                 '/settings': (context) => const SettingsScreen(),
-                '/history': (context) => const MainTabsScreen(initialIndex: 2),
+                '/history': (context) => const HistoryScreen(),
                 '/about': (context) => const AboutScreen(),
                 '/logout': (context) => const LogoutScreen(),
                 '/terms': (context) => const TermsConditionsScreen(),

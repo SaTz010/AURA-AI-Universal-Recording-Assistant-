@@ -1,12 +1,16 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../providers/auth_provider.dart';
+import '../services/api_service.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
 import 'recording_session_screen.dart';
 import 'widgets/dashboard_lower_content.dart';
+import 'widgets/summarization_flow.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.onSelectTab});
@@ -22,12 +26,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   late final AnimationController _micController;
   late final Animation<double> _pulseAnimation;
 
+  late final ApiService _apiService;
+  bool _isPickingUpload = false;
+
   String _recordingStatus = '';
   bool _isOpeningRecording = false;
 
   @override
   void initState() {
     super.initState();
+    _apiService = ApiService();
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
@@ -47,7 +55,65 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   void dispose() {
     _pulseController.dispose();
     _micController.dispose();
+    _apiService.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickAndProcessUploadedAudio() async {
+    if (_isPickingUpload) return;
+    _isPickingUpload = true;
+
+    final colors = AuraThemeColors.of(context);
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const [
+          'm4a',
+          'mp3',
+          'wav',
+          'aac',
+          'flac',
+          'ogg',
+          'opus',
+        ],
+      );
+
+      if (!mounted) return;
+      if (result == null || result.files.isEmpty) return;
+
+      final file = result.files.single;
+      final audioPath = file.path;
+      if (audioPath == null || audioPath.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Selected file path is not available on this platform'),
+            backgroundColor: colors.surface,
+          ),
+        );
+        return;
+      }
+
+      final authProvider = AuraAuthProvider.of(context);
+      final uid = authProvider.isGuest ? null : authProvider.user?.uid;
+
+      await SummarizationFlow.summarizeAndOpen(
+        context: context,
+        apiService: _apiService,
+        uid: uid,
+        audioPath: audioPath,
+        audioFileName: file.name,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Unable to open file picker'),
+          backgroundColor: colors.surface,
+        ),
+      );
+    } finally {
+      _isPickingUpload = false;
+    }
   }
 
   Future<void> _openRecordingSession() async {
@@ -136,9 +202,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ElevatedButton(
                     onPressed: () {
                       Navigator.pop(sheetContext);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('File picker not implemented')),
-                      );
+                      // Let the sheet dismiss before opening the picker.
+                      Future<void>.delayed(AuraMotion.instant, _pickAndProcessUploadedAudio);
                     },
                     child: const Text('Choose file'),
                   ),
@@ -466,7 +531,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     const SizedBox(height: AuraSpacing.lg),
                     DashboardLowerContent(
                       onUploadAudio: _showUploadSheet,
-                      onSummarize: () => _selectTab(3),
+                      onSummarize: () => _selectTab(2),
                       onViewAllRecent: () => _selectTab(1),
                       onRecentFileTap: (_) => _selectTab(1),
                     ),

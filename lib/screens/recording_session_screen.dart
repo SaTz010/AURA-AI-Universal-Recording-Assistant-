@@ -26,8 +26,10 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
   bool _hasStarted = false;
 
   static const RecorderSettings _speechRecorderSettings = RecorderSettings(
-    sampleRate: 16000,
-    bitRate: 48000,
+    // 44.1kHz AAC in MP4 is broadly supported across Android OEMs.
+    // 16kHz AAC can produce empty/corrupt files on some devices.
+    sampleRate: 44100,
+    bitRate: 128000,
     androidEncoderSettings: AndroidEncoderSettings(androidEncoder: AndroidEncoder.aacLc),
     iosEncoderSettings: IosEncoderSetting(iosEncoder: IosEncoder.kAudioFormatMPEG4AAC),
   );
@@ -37,9 +39,58 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
   Duration _elapsedDuration = Duration.zero;
   bool _isInitializing = true;
   bool _isRecording = false;
-  bool _isPaused = false;
   bool _isBusy = false;
   bool _isStopping = false;
+
+  Future<void> _cancelRecording() async {
+    if (_isBusy || _isStopping) return;
+
+    // If we're not actively recording, Cancel behaves like a normal back.
+    if (!_isRecording) {
+      if (mounted) Navigator.pop(context);
+      return;
+    }
+
+    _isBusy = true;
+    if (mounted) {
+      setState(() => _isStopping = true);
+    }
+
+    // Stop timers/UI immediately.
+    _recordingStopwatch.stop();
+
+    try {
+      // Ensure we fully finalize the platform recorder before touching the file.
+      await _stopRecorderGracefully();
+
+      final path = _recordingPath;
+      if (path != null) {
+        try {
+          final file = File(path);
+          if (await file.exists()) {
+            await file.delete();
+          }
+        } catch (_) {
+          // Best effort deletion.
+        }
+      }
+    } catch (_) {
+      // Best effort cancel.
+    } finally {
+      _recordingStopwatch
+        ..stop()
+        ..reset();
+
+      if (mounted) {
+        setState(() {
+          _isRecording = false;
+          _isStopping = false;
+        });
+        Navigator.pop(context);
+      }
+      _isBusy = false;
+    }
+  }
 
   @override
   void initState() {
@@ -120,7 +171,6 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
       setState(() {
         _elapsedDuration = Duration.zero;
         _isRecording = true;
-        _isPaused = false;
         _isInitializing = false;
       });
     } catch (error) {
@@ -134,36 +184,6 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
         SnackBar(content: Text('Error starting recording: $error')),
       );
       Navigator.pop(context);
-    }
-  }
-
-  Future<void> _togglePause() async {
-    if (_isBusy || !_isRecording) return;
-    _isBusy = true;
-
-    try {
-      if (_isPaused) {
-        await _recorderController.record();
-        _recordingStopwatch.start();
-        if (!mounted) return;
-        setState(() {
-          _isPaused = false;
-        });
-      } else {
-        await _recorderController.pause();
-        _recordingStopwatch.stop();
-        if (!mounted) return;
-        setState(() {
-          _isPaused = true;
-        });
-      }
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to update recording state: $error')),
-      );
-    } finally {
-      _isBusy = false;
     }
   }
 
@@ -192,24 +212,7 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
     }));
 
     try {
-      // Some devices/plugins can hang on stop() for long recordings.
-      // If paused, resume first; then stop with a timeout fallback.
-      if (_isPaused) {
-        try {
-          await _recorderController.record();
-          _recordingStopwatch.start();
-          if (mounted) {
-            setState(() {
-              _isPaused = false;
-            });
-          }
-          await Future<void>.delayed(const Duration(milliseconds: 150));
-        } catch (_) {
-          // Ignore and continue to stop attempt.
-        }
-      }
-
-      final path = await _stopRecorderWithTimeout() ?? _recordingPath;
+      final path = await _stopRecorderGracefully() ?? _recordingPath;
 
       _recordingStopwatch
         ..stop()
@@ -218,7 +221,6 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
       if (!mounted) return;
       setState(() {
         _isRecording = false;
-        _isPaused = false;
       });
 
       if (path == null || !popWhenDone) {
@@ -229,8 +231,12 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
       }
 
       final recordedFile = File(path);
-      if (!await recordedFile.exists()) {
+      final isReady = await _waitForRecordingFileReady(recordedFile);
+      if (!isReady) {
         if (popWhenDone && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Recording could not be saved. Please try again.')),
+          );
           Navigator.pop(context);
         }
         return;
@@ -267,20 +273,58 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
     }
   }
 
-  Future<String?> _stopRecorderWithTimeout() async {
+  Future<String?> _stopRecorderGracefully() async {
+    // Important: Future.timeout does NOT cancel the underlying stop() call.
+    // If we proceed while the platform recorder is still finalizing, we can
+    // end up renaming/copying a file that's still being written, leading to
+    // corrupt recordings.
+    final stopFuture = _recorderController.stop();
+
     try {
-      return await _recorderController
-          .stop()
-          .timeout(const Duration(seconds: 15));
+      return await stopFuture.timeout(const Duration(seconds: 20));
     } on TimeoutException {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Recorder took too long to finalize. Saving best effort...'),
-          ),
+          const SnackBar(content: Text('Finalizing recording… please keep the app open.')),
         );
       }
-      return null;
+      // Wait for the original stop() to actually complete.
+      return await stopFuture;
+    }
+  }
+
+  Future<bool> _waitForRecordingFileReady(File file) async {
+    try {
+      if (!await file.exists()) return false;
+
+      // Wait briefly for the encoder to flush. Some devices report 0 bytes
+      // immediately after stop() even though the file becomes valid shortly.
+      const maxWait = Duration(seconds: 3);
+      const interval = Duration(milliseconds: 150);
+
+      var waited = Duration.zero;
+      var lastSize = -1;
+      var stableCount = 0;
+
+      while (waited <= maxWait) {
+        final size = await file.length();
+        if (size > 0) {
+          if (size == lastSize) {
+            stableCount += 1;
+            if (stableCount >= 2) return true;
+          } else {
+            stableCount = 0;
+          }
+        }
+
+        lastSize = size;
+        await Future<void>.delayed(interval);
+        waited += interval;
+      }
+
+      return await file.exists() && await file.length() > 0;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -369,8 +413,19 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
       final candidateFile = File(candidatePath);
 
       if (!await candidateFile.exists()) {
-        final renamed = await originalFile.rename(candidatePath);
-        return renamed.path;
+        try {
+          final renamed = await originalFile.rename(candidatePath);
+          return renamed.path;
+        } catch (_) {
+          // If rename fails (e.g., cross-device move or file lock), fall back to copy.
+          try {
+            await originalFile.copy(candidatePath);
+            await originalFile.delete();
+            return candidatePath;
+          } catch (_) {
+            return null;
+          }
+        }
       }
 
       attempt++;
@@ -389,7 +444,7 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop && _isRecording) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Use stop to finish the recording session.')),
+            const SnackBar(content: Text('Use Stop to save or Cancel to discard.')),
           );
         }
       },
@@ -428,22 +483,20 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
                             width: 10,
                             height: 10,
                             decoration: BoxDecoration(
-                              color: _isPaused ? colors.textTertiary : const Color(0xFFFF4D4F),
+                              color: const Color(0xFFFF4D4F),
                               shape: BoxShape.circle,
-                              boxShadow: _isPaused
-                                  ? null
-                                  : [
-                                      BoxShadow(
-                                        color: const Color(0xFFFF4D4F).withValues(alpha: 0.35),
-                                        blurRadius: 10,
-                                        spreadRadius: 2,
-                                      ),
-                                    ],
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFFF4D4F).withValues(alpha: 0.35),
+                                  blurRadius: 10,
+                                  spreadRadius: 2,
+                                ),
+                              ],
                             ),
                           ),
                           const SizedBox(width: AuraSpacing.sm),
                           Text(
-                            _isPaused ? 'Recording paused' : 'Recording in progress',
+                            'Recording in progress',
                             textAlign: TextAlign.center,
                             style: AuraTypography.bodyLarge(colors.textSecondary).copyWith(
                               fontWeight: FontWeight.w600,
@@ -511,9 +564,7 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
                                   ),
                                   const SizedBox(height: AuraSpacing.md),
                                   Text(
-                                    _isPaused
-                                        ? 'Resume when you are ready to continue.'
-                                        : 'Recording your audio clearly and continuously.',
+                                    'Recording your audio clearly and continuously.',
                                     textAlign: TextAlign.center,
                                     style: AuraTypography.bodyMedium(colors.textSecondary),
                                   ),
@@ -528,11 +579,9 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
                         children: [
                           Expanded(
                             child: OutlinedButton.icon(
-                              onPressed: (_isBusy || _isStopping) ? null : _togglePause,
-                              icon: Icon(
-                                _isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
-                              ),
-                              label: Text(_isPaused ? 'Resume' : 'Pause'),
+                              onPressed: (_isBusy || _isStopping) ? null : _cancelRecording,
+                              icon: const Icon(Icons.close_rounded),
+                              label: const Text('Cancel'),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: colors.textPrimary,
                                 side: BorderSide(color: colors.border),

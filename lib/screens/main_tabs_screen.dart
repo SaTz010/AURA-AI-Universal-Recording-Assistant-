@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme/aura_theme.dart';
 import 'home_screen.dart';
-import 'history_screen.dart';
+import 'profile_screen.dart';
 import 'recordings_screen.dart';
 import 'summary_screen.dart';
 import 'widgets/main_bottom_nav.dart';
@@ -19,21 +19,10 @@ class MainTabsScreen extends StatefulWidget {
 class _MainTabsScreenState extends State<MainTabsScreen> {
   late int _index;
 
-  late final List<Widget> _tabs;
-
   @override
   void initState() {
     super.initState();
     _index = widget.initialIndex.clamp(0, 3);
-
-    _tabs = [
-      HomeScreen(
-        onSelectTab: _setIndex,
-      ),
-      const RecordingsScreen(),
-      const HistoryScreen(),
-      const SummaryScreen(),
-    ];
   }
 
   @override
@@ -54,11 +43,20 @@ class _MainTabsScreenState extends State<MainTabsScreen> {
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
 
+    final tabs = <Widget>[
+      HomeScreen(
+        onSelectTab: _setIndex,
+      ),
+      const RecordingsScreen(),
+      const SummaryScreen(),
+      const ProfileScreen(),
+    ];
+
     return Scaffold(
       backgroundColor: colors.background,
       body: IndexedStack(
         index: _index,
-        children: _tabs,
+        children: tabs,
       ),
       bottomNavigationBar: MainBottomNav(
         selectedIndex: _index,

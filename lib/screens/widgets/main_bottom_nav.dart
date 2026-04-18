@@ -82,12 +82,12 @@ class MainBottomNav extends StatelessWidget {
                     label: 'Recordings',
                   ),
                   NavigationDestination(
-                    icon: Icon(Icons.history_rounded),
-                    label: 'History',
-                  ),
-                  NavigationDestination(
                     icon: Icon(Icons.auto_awesome_rounded),
                     label: 'Summarize',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.person_rounded),
+                    label: 'Profile',
                   ),
                 ],
               ),
