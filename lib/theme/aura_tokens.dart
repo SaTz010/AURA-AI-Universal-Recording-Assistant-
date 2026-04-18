@@ -98,6 +98,14 @@ class AuraMotion {
   static const Curve spring      = Curves.elasticOut;
 }
 
+/// Splash screen tokens (kept separate from the brand-locked palette).
+class AuraSplashTokens {
+  AuraSplashTokens._();
+
+  static const Color darkBackground = Color(0xFF0A0B0E);
+  static const Color lightBackground = Color(0xFFD8DEEF);
+}
+
 /// Typography scale — all use Poppins
 class AuraTypography {
   AuraTypography._();

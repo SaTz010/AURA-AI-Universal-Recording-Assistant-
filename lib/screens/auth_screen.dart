@@ -229,10 +229,38 @@ class _AuthBrandHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
+    final isDark = colors.isDark;
+
+    final primaryLogoAsset =
+        isDark ? 'assets/images/light.png' : 'assets/images/dark.png';
+    final fallbackLogoAsset = isDark
+        ? 'assets/images/light_theme_logo.png'
+        : 'assets/images/Dark_theme_logo.png';
+
+    final shortestSide = MediaQuery.sizeOf(context).shortestSide;
+    final logoSize = (shortestSide * 0.22).clamp(72.0, 120.0);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        SizedBox(
+          width: logoSize,
+          height: logoSize,
+          child: Image.asset(
+            primaryLogoAsset,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              return Image.asset(
+                fallbackLogoAsset,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) {
+                  return const SizedBox.shrink();
+                },
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: AuraSpacing.base),
         Text(
           'AURA',
           style: AuraTypography.displayLarge(colors.textPrimary).copyWith(letterSpacing: 3),
