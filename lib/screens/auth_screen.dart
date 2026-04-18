@@ -238,7 +238,7 @@ class _AuthBrandHeader extends StatelessWidget {
         : 'assets/images/Dark_theme_logo.png';
 
     final shortestSide = MediaQuery.sizeOf(context).shortestSide;
-    final logoSize = (shortestSide * 0.22).clamp(72.0, 120.0);
+    final logoSize = (shortestSide * 0.18).clamp(60.0, 96.0);
 
     return Column(
       mainAxisSize: MainAxisSize.min,

@@ -63,7 +63,7 @@ class _AuraSplashScreenState extends State<AuraSplashScreen> {
 
     final size = MediaQuery.sizeOf(context);
     final shortestSide = size.shortestSide;
-    final logoSize = (shortestSide * 0.45).clamp(140.0, 240.0);
+    final logoSize = (shortestSide * 0.38).clamp(120.0, 210.0);
 
     return Scaffold(
       backgroundColor:
