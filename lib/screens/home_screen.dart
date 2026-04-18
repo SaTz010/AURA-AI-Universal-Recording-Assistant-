@@ -303,7 +303,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                 customBorder: const CircleBorder(),
                                 onTap: () {
                                   HapticFeedback.lightImpact();
-                                  Navigator.pushNamed(context, '/profile');
+                                  _selectTab(3);
                                 },
                                 child: Padding(
                                   padding: const EdgeInsets.all(AuraSpacing.xxs),
