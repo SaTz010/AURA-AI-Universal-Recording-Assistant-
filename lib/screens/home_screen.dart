@@ -155,7 +155,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
     final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
-    final homeHeaderBg = colors.surface.withValues(alpha: 0.5);
+    final homeHeaderBg = isDarkTheme
+        ? colors.surface.withValues(alpha: 0.5)
+        : colors.surface;
     final topInset = MediaQuery.of(context).padding.top;
 
     final currentUser = FirebaseAuth.instance.currentUser;
