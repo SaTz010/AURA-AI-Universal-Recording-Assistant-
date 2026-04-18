@@ -18,30 +18,31 @@ class MainBottomNav extends StatelessWidget {
     final colors = AuraThemeColors.of(context);
     final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
     final navHeight = AuraSpacing.massive + AuraSpacing.base; // 80px
+    final bottomInset = MediaQuery.of(context).padding.bottom;
 
     const radius = BorderRadius.only(
       topLeft: Radius.circular(26),
       topRight: Radius.circular(26),
     );
 
-    return SafeArea(
-      top: false,
-      child: Container(
-        decoration: BoxDecoration(
-          color: colors.surface,
-          borderRadius: radius,
-          boxShadow: isDarkTheme
-              ? null
-              : [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.10),
-                    blurRadius: 18,
-                    offset: const Offset(0, -6),
-                  ),
-                ],
-        ),
-        child: ClipRRect(
-          borderRadius: radius,
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: radius,
+        boxShadow: isDarkTheme
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.10),
+                  blurRadius: 18,
+                  offset: const Offset(0, -6),
+                ),
+              ],
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: Padding(
+          padding: EdgeInsets.only(bottom: bottomInset),
           child: SizedBox(
             height: navHeight,
             child: NavigationBarTheme(
