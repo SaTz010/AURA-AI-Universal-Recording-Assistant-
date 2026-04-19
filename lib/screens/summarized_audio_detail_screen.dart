@@ -2,29 +2,45 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../providers/auth_provider.dart';
+import '../screens/pdf_preview_screen.dart';
+
 import '../services/pdf_generator.dart';
+import '../services/pdf_saf_service.dart';
+import '../services/summaries_library_events.dart';
 import '../services/summaries_storage.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
 
 class SummarizedAudioDetailScreen extends StatefulWidget {
-  const SummarizedAudioDetailScreen({
-    super.key,
-    required this.summary,
-  });
+  const SummarizedAudioDetailScreen({super.key, required this.summary});
 
   final SummarizedAudio summary;
 
   @override
-  State<SummarizedAudioDetailScreen> createState() => _SummarizedAudioDetailScreenState();
+  State<SummarizedAudioDetailScreen> createState() =>
+      _SummarizedAudioDetailScreenState();
 }
 
-class _SummarizedAudioDetailScreenState extends State<SummarizedAudioDetailScreen> {
-  int _selectedTabIndex = 0; // 0: Summary, 1: Transcript, 2: Translation (if available)
+class _SummarizedAudioDetailScreenState
+    extends State<SummarizedAudioDetailScreen> {
+  String? _effectiveUid;
+  String? _pdfUri;
+  bool _isPdfBusy = false;
 
-  bool get _hasTranslation {
-    final t = widget.summary.translation;
-    return t != null && t.trim().isNotEmpty;
+  @override
+  void initState() {
+    super.initState();
+    _pdfUri = widget.summary.pdfUri;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final authProvider = AuraAuthProvider.of(context);
+    final nextUid = authProvider.isGuest ? null : authProvider.user?.uid;
+    if (nextUid == _effectiveUid) return;
+    _effectiveUid = nextUid;
   }
 
   String _displayTitle(String fileName) {
@@ -33,22 +49,16 @@ class _SummarizedAudioDetailScreenState extends State<SummarizedAudioDetailScree
     return fileName.substring(0, dot);
   }
 
-  String _currentTabText() {
-    switch (_selectedTabIndex) {
-      case 0:
-        return widget.summary.summary;
-      case 1:
-        return widget.summary.transcript;
-      case 2:
-        return widget.summary.translation ?? '';
-      default:
-        return '';
-    }
+  String _suggestedPdfFileName() {
+    final title = _displayTitle(widget.summary.fileName).trim();
+    final safe = title.isEmpty
+        ? 'AURA_Summary'
+        : title.replaceAll(RegExp(r'[\\/\n\r\t]'), '_');
+    return '$safe.pdf';
   }
 
-  void _copyCurrentTab() {
+  void _copyToClipboard(String text) {
     HapticFeedback.lightImpact();
-    final text = _currentTabText();
     Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
 
@@ -65,22 +75,25 @@ class _SummarizedAudioDetailScreenState extends State<SummarizedAudioDetailScree
     HapticFeedback.lightImpact();
 
     final title = _displayTitle(widget.summary.fileName);
-    final category = widget.summary.category.isEmpty ? 'Unknown' : widget.summary.category;
+    final category = widget.summary.category.isEmpty
+        ? 'Unknown'
+        : widget.summary.category;
+
+    final resolved = _resolveDisplayedTexts();
 
     final buffer = StringBuffer();
     buffer.writeln('AURA Summary');
     buffer.writeln('============\n');
     buffer.writeln('File: $title');
     buffer.writeln('Category: $category');
-    buffer.writeln('Cost: \$${widget.summary.cost.toStringAsFixed(4)}\n');
 
     buffer.writeln('SUMMARY');
     buffer.writeln('-------');
-    buffer.writeln(widget.summary.summary);
+    buffer.writeln(resolved.summary);
 
     buffer.writeln('\nTRANSCRIPT');
     buffer.writeln('----------');
-    buffer.writeln(widget.summary.transcript);
+    buffer.writeln(resolved.transcript);
 
     final translation = widget.summary.translation;
     if (translation != null && translation.trim().isNotEmpty) {
@@ -89,67 +102,121 @@ class _SummarizedAudioDetailScreenState extends State<SummarizedAudioDetailScree
       buffer.writeln(translation);
     }
 
-    Share.share(
-      buffer.toString(),
-      subject: 'AURA Summary - $title',
-    );
+    Share.share(buffer.toString(), subject: 'AURA Summary - $title');
   }
 
   Future<void> _exportPdf() async {
+    if (_isPdfBusy) return;
+
     HapticFeedback.lightImpact();
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
     final colors = AuraThemeColors.of(context);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Generating PDF...'),
-        duration: const Duration(seconds: 1),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    setState(() => _isPdfBusy = true);
+    try {
+      final existingUri = _pdfUri?.trim();
+      if (existingUri != null && existingUri.isNotEmpty) {
+        try {
+          final opened = await PdfSafService.openPdfUri(uri: existingUri);
+          if (opened) return;
+        } catch (_) {
+          // Fall through to preview+download.
+        }
 
-    final pdfFile = await PdfGenerator.generateSummaryPdf(
-      fileName: widget.summary.fileName,
-      category: widget.summary.category.isEmpty ? 'Unknown' : widget.summary.category,
-      summary: widget.summary.summary,
-      transcript: widget.summary.transcript,
-      translation: widget.summary.translation,
-      cost: widget.summary.cost,
-    );
+        // Clear stale URI so the next steps re-download.
+        final updated = await SummariesStorage.updatePdfUri(
+          uid: _effectiveUid,
+          item: widget.summary,
+          pdfUri: null,
+        );
+        if (updated != null) {
+          SummariesLibraryEvents.notifyChanged();
+        }
+        _pdfUri = null;
+      }
 
-    if (!mounted) return;
+      final resolved = _resolveDisplayedTexts();
 
-    if (pdfFile == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         SnackBar(
-          content: const Text('Failed to generate PDF'),
-          backgroundColor: colors.accent.withOpacity(0.8),
+          content: const Text('Preparing PDF…'),
+          duration: const Duration(seconds: 1),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      final bytes = await PdfGenerator.generateSummaryPdfBytes(
+        fileName: widget.summary.fileName,
+        category:
+            widget.summary.category.isEmpty ? 'Unknown' : widget.summary.category,
+        summary: resolved.summary,
+        transcript: resolved.transcript,
+        translation: widget.summary.translation,
+        cost: widget.summary.cost,
+      );
+
+      if (!mounted) return;
+
+      if (bytes == null) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: const Text('Failed to generate PDF'),
+            backgroundColor: colors.accent.withValues(alpha: 204),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      final savedUri = await navigator.push<String?>(
+        MaterialPageRoute(
+          builder: (_) => PdfPreviewScreen(
+            pdfBytes: bytes,
+            suggestedFileName: _suggestedPdfFileName(),
+          ),
+        ),
+      );
+
+      if (!mounted) return;
+
+      if (savedUri == null || savedUri.trim().isEmpty) return;
+
+      final updated = await SummariesStorage.updatePdfUri(
+        uid: _effectiveUid,
+        item: widget.summary,
+        pdfUri: savedUri,
+      );
+      if (updated != null) {
+        SummariesLibraryEvents.notifyChanged();
+      }
+
+      setState(() => _pdfUri = savedUri);
+
+      messenger.showSnackBar(
+        SnackBar(
+          content: const Text('PDF downloaded'),
           duration: const Duration(seconds: 2),
           behavior: SnackBarBehavior.floating,
         ),
       );
-      return;
+    } finally {
+      if (mounted) {
+        setState(() => _isPdfBusy = false);
+      }
     }
-
-    await Share.shareXFiles(
-      [XFile(pdfFile.path)],
-      subject: 'AURA Summary - ${_displayTitle(widget.summary.fileName)}',
-    );
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('PDF saved to: ${pdfFile.path}'),
-        duration: const Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
     final title = _displayTitle(widget.summary.fileName);
-    final category = widget.summary.category.isEmpty ? 'Unknown' : widget.summary.category;
+    final category = widget.summary.category.isEmpty
+        ? 'Unknown'
+        : widget.summary.category;
+
+    final resolved = _resolveDisplayedTexts();
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -160,9 +227,24 @@ class _SummarizedAudioDetailScreenState extends State<SummarizedAudioDetailScree
           icon: Icon(Icons.arrow_back, color: colors.textPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text(
-          'Summary',
-          style: AuraTypography.titleLarge(colors.textPrimary),
+        title: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: AuraTypography.titleMedium(colors.textPrimary),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              category,
+              style: AuraTypography.bodySmall(colors.textSecondary),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
         centerTitle: false,
         actions: [
@@ -173,146 +255,206 @@ class _SummarizedAudioDetailScreenState extends State<SummarizedAudioDetailScree
           ),
           IconButton(
             icon: Icon(Icons.picture_as_pdf_rounded, color: colors.accent),
-            onPressed: _exportPdf,
+            onPressed: _isPdfBusy ? null : _exportPdf,
             tooltip: 'Export PDF',
           ),
           const SizedBox(width: AuraSpacing.sm),
         ],
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              color: colors.surfaceElevated,
-              padding: const EdgeInsets.all(AuraSpacing.base),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: AuraTypography.titleMedium(colors.textPrimary),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: AuraSpacing.xs),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AuraSpacing.sm,
-                          vertical: AuraSpacing.xs,
-                        ),
-                        decoration: BoxDecoration(
-                          color: colors.accent.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(AuraRadius.md),
-                        ),
-                        child: Text(
-                          category,
-                          style: AuraTypography.bodySmall(colors.accent),
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        'Cost: \$${widget.summary.cost.toStringAsFixed(4)}',
-                        style: AuraTypography.bodySmall(colors.textSecondary),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              color: colors.surface,
-              padding: const EdgeInsets.symmetric(horizontal: AuraSpacing.base),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    _buildTabButton('Summary', 0, colors),
-                    _buildTabButton('Transcript', 1, colors),
-                    if (_hasTranslation) _buildTabButton('Translation', 2, colors),
-                  ],
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AuraSpacing.base,
+            AuraSpacing.lg,
+            AuraSpacing.base,
+            AuraSpacing.lg,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _DropdownSection(
+                  title: 'Cleaned transcript',
+                  icon: Icons.subject_rounded,
+                  text: resolved.transcript,
+                  onCopy: () => _copyToClipboard(resolved.transcript),
+                  initiallyExpanded: false,
                 ),
-              ),
+                const SizedBox(height: AuraSpacing.base),
+                _DropdownSection(
+                  title: 'Summary',
+                  icon: Icons.summarize_rounded,
+                  text: resolved.summary,
+                  onCopy: () => _copyToClipboard(resolved.summary),
+                  initiallyExpanded: true,
+                ),
+              ],
             ),
-            Container(
-              color: colors.surface,
-              padding: const EdgeInsets.all(AuraSpacing.base),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _currentTabText(),
-                    style: AuraTypography.bodyMedium(colors.textPrimary).copyWith(height: 1.6),
-                  ),
-                  const SizedBox(height: AuraSpacing.base),
-                  Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: _copyCurrentTab,
-                      borderRadius: BorderRadius.circular(AuraRadius.md),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: AuraSpacing.sm,
-                          horizontal: AuraSpacing.base,
-                        ),
-                        decoration: BoxDecoration(
-                          color: colors.accentSoft.withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(AuraRadius.md),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.content_copy, size: 18, color: colors.accentSoft),
-                            const SizedBox(width: AuraSpacing.xs),
-                            Text(
-                              'Copy text',
-                              style: AuraTypography.button(colors.accentSoft),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildTabButton(String label, int index, AuraThemeColors colors) {
-    final isSelected = _selectedTabIndex == index;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () {
-          HapticFeedback.lightImpact();
-          setState(() => _selectedTabIndex = index);
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            vertical: AuraSpacing.base,
-            horizontal: AuraSpacing.sm,
-          ),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: isSelected ? colors.accent : Colors.transparent,
-                width: 2,
+  ({String transcript, String summary}) _resolveDisplayedTexts() {
+    final transcript = widget.summary.transcript.trim();
+    final summary = widget.summary.summary.trim();
+
+    // If the summary contains section headings from the backend, split it so
+    // "Cleaned transcript" and "Summary" render separately.
+    if (_looksSectioned(summary)) {
+      final cleanedTranscript = _cleanDisplayText(
+        _extractSection(summary, 'CLEANED TRANSCRIPT'),
+      );
+      final englishSummary = _cleanDisplayText(
+        _extractSection(summary, 'ENGLISH SUMMARY'),
+      );
+
+      final effectiveTranscript = transcript.isNotEmpty
+          ? _cleanDisplayText(transcript)
+          : cleanedTranscript;
+
+      final effectiveSummary = englishSummary.isNotEmpty
+          ? englishSummary
+          : _cleanDisplayText(summary);
+
+      return (
+        transcript: effectiveTranscript,
+        summary: effectiveSummary,
+      );
+    }
+
+    return (
+      transcript: _cleanDisplayText(transcript),
+      summary: _cleanDisplayText(summary),
+    );
+  }
+
+  bool _looksSectioned(String text) {
+    final upper = text.toUpperCase();
+    return upper.contains('CLEANED TRANSCRIPT') ||
+        upper.contains('ENGLISH SUMMARY') ||
+        text.contains('###');
+  }
+
+  String _cleanDisplayText(String text) {
+    final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    final lines = normalized.split('\n');
+    final kept = <String>[];
+    for (final line in lines) {
+      if (RegExp(r'^\s*#{1,6}\s+').hasMatch(line)) continue;
+      kept.add(line);
+    }
+    return kept.join('\n').trim();
+  }
+
+  String _extractSection(String text, String heading) {
+    if (text.trim().isEmpty) return '';
+
+    final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    final pattern = '^\\s*(?:#{1,6}\\s*)?${RegExp.escape(heading)}\\s*\$';
+    final startRe = RegExp(
+      pattern,
+      multiLine: true,
+      caseSensitive: false,
+    );
+    final start = startRe.firstMatch(normalized);
+    if (start == null) return '';
+
+    final remainder = normalized.substring(start.end);
+    final nextHeading = RegExp(r'^\s*#{1,6}\s+.+$', multiLine: true)
+        .firstMatch(remainder);
+
+    final content = nextHeading == null
+        ? remainder
+        : remainder.substring(0, nextHeading.start);
+
+    return content.trim();
+  }
+}
+
+class _DropdownSection extends StatelessWidget {
+  const _DropdownSection({
+    required this.title,
+    required this.icon,
+    required this.text,
+    required this.onCopy,
+    this.initiallyExpanded = false,
+  });
+
+  final String title;
+  final IconData icon;
+  final String text;
+  final VoidCallback onCopy;
+  final bool initiallyExpanded;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AuraThemeColors.of(context);
+    final effectiveText = text.trim().isEmpty
+        ? 'No text available.'
+        : text.trim();
+
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: AuraRadius.lgBr,
+        border: Border.all(color: colors.border),
+        boxShadow: AuraElevation.low(Colors.black),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ClipRRect(
+          borderRadius: AuraRadius.lgBr,
+          child: ExpansionTile(
+            initiallyExpanded: initiallyExpanded,
+            tilePadding: const EdgeInsets.symmetric(
+              horizontal: AuraSpacing.lg,
+              vertical: AuraSpacing.xs,
+            ),
+            childrenPadding: const EdgeInsets.fromLTRB(
+              AuraSpacing.lg,
+              0,
+              AuraSpacing.lg,
+              AuraSpacing.lg,
+            ),
+            iconColor: colors.textSecondary,
+            collapsedIconColor: colors.textSecondary,
+            leading: Icon(icon, color: colors.accentSoft),
+            title: Text(
+              title,
+              style: AuraTypography.titleSmall(
+                colors.textPrimary,
+              ).copyWith(fontWeight: FontWeight.w600),
+            ),
+            children: [
+              SelectableText(
+                effectiveText,
+                style: AuraTypography.bodyMedium(
+                  colors.textPrimary,
+                ).copyWith(height: 1.6),
               ),
-            ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              color: isSelected ? colors.accent : colors.textSecondary,
-              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-              height: 1.5,
-            ),
+              const SizedBox(height: AuraSpacing.base),
+              Align(
+                alignment: Alignment.centerRight,
+                child: OutlinedButton.icon(
+                  onPressed: onCopy,
+                  icon: const Icon(Icons.content_copy_rounded, size: 18),
+                  label: const Text('Copy'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: colors.textPrimary,
+                    side: BorderSide(color: colors.border),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AuraSpacing.sm,
+                      horizontal: AuraSpacing.base,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: AuraRadius.mdBr,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

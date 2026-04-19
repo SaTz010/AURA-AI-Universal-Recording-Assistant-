@@ -3,15 +3,23 @@ package com.example.aura
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import android.app.Activity
 import android.media.AudioManager
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.PowerManager
 import android.content.Context
+import android.content.Intent
+import android.content.ActivityNotFoundException
+import android.net.Uri
 import android.util.Log
 
 class MainActivity : FlutterActivity() {
     private val channelName = "com.aura.recording/audio"
+    private val pdfChannelName = "com.aura.files/pdf"
+    private val createPdfRequestCode = 9201
+
+    private var pendingCreatePdfResult: MethodChannel.Result? = null
     private var mediaRecorder: MediaRecorder? = null
     private var recordingPath: String? = null
     private var isRecording = false
@@ -76,6 +84,121 @@ class MainActivity : FlutterActivity() {
                     }
                 }
             }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, pdfChannelName)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "createPdfDocument" -> {
+                        if (pendingCreatePdfResult != null) {
+                            result.error(
+                                "BUSY",
+                                "A document picker is already in progress",
+                                null
+                            )
+                            return@setMethodCallHandler
+                        }
+
+                        val suggestedName = call.argument<String>("suggestedName")
+                            ?: "AURA_Summary.pdf"
+
+                        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "application/pdf"
+                            putExtra(Intent.EXTRA_TITLE, suggestedName)
+                            addFlags(
+                                Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                    Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+                            )
+                        }
+
+                        pendingCreatePdfResult = result
+                        startActivityForResult(intent, createPdfRequestCode)
+                    }
+                    "writeBytesToUri" -> {
+                        val uriString = call.argument<String>("uri")
+                        val bytes = call.argument<ByteArray>("bytes")
+
+                        if (uriString == null || bytes == null) {
+                            result.error("INVALID_ARGS", "uri and bytes are required", null)
+                            return@setMethodCallHandler
+                        }
+
+                        try {
+                            val uri = Uri.parse(uriString)
+                            contentResolver.openOutputStream(uri)?.use { out ->
+                                out.write(bytes)
+                                out.flush()
+                            } ?: run {
+                                result.success(false)
+                                return@setMethodCallHandler
+                            }
+                            result.success(true)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to write PDF bytes", e)
+                            result.success(false)
+                        }
+                    }
+                    "openPdfUri" -> {
+                        val uriString = call.argument<String>("uri")
+                        if (uriString == null) {
+                            result.error("INVALID_ARGS", "uri is required", null)
+                            return@setMethodCallHandler
+                        }
+
+                        try {
+                            val uri = Uri.parse(uriString)
+                            val intent = Intent(Intent.ACTION_VIEW).apply {
+                                setDataAndType(uri, "application/pdf")
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            startActivity(Intent.createChooser(intent, "Open PDF"))
+                            result.success(true)
+                        } catch (e: ActivityNotFoundException) {
+                            result.error("NO_APP", "No PDF viewer installed", null)
+                        } catch (e: Exception) {
+                            result.error("OPEN_FAILED", "Failed to open PDF", null)
+                        }
+                    }
+                    else -> {
+                        result.notImplemented()
+                    }
+                }
+            }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode != createPdfRequestCode) return
+
+        val pending = pendingCreatePdfResult
+        pendingCreatePdfResult = null
+
+        if (pending == null) return
+
+        if (resultCode != Activity.RESULT_OK) {
+            pending.success(null)
+            return
+        }
+
+        val uri = data?.data
+        if (uri == null) {
+            pending.success(null)
+            return
+        }
+
+        try {
+            val flags = (data.flags and
+                (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION))
+
+            contentResolver.takePersistableUriPermission(uri, flags)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to persist URI permission", e)
+        }
+
+        pending.success(uri.toString())
     }
 
     // ════════════════════════════════════════════════════════════════════

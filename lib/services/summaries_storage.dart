@@ -14,6 +14,7 @@ class SummarizedAudio {
     this.translation,
     this.cost = 0.0,
     this.category = '',
+    this.pdfUri,
   });
 
   final String filePath;
@@ -25,6 +26,24 @@ class SummarizedAudio {
   final String? translation;
   final double cost;
   final String category;
+  final String? pdfUri;
+
+  SummarizedAudio copyWith({
+    String? pdfUri,
+  }) {
+    return SummarizedAudio(
+      filePath: filePath,
+      fileName: fileName,
+      createdAtMs: createdAtMs,
+      description: description,
+      summary: summary,
+      transcript: transcript,
+      translation: translation,
+      cost: cost,
+      category: category,
+      pdfUri: pdfUri,
+    );
+  }
 
   Map<String, Object?> toJson() => {
         'filePath': filePath,
@@ -36,6 +55,7 @@ class SummarizedAudio {
         'translation': translation,
         'cost': cost,
         'category': category,
+      'pdfUri': pdfUri,
       };
 
   static SummarizedAudio? fromJson(Object? raw) {
@@ -57,6 +77,7 @@ class SummarizedAudio {
     final translation = raw['translation'] as String?;
     final cost = _readCost(raw);
     final category = raw['category'] as String? ?? '';
+    final pdfUri = raw['pdfUri'] as String?;
 
     return SummarizedAudio(
       filePath: filePath,
@@ -68,6 +89,7 @@ class SummarizedAudio {
       translation: translation,
       cost: cost,
       category: category,
+      pdfUri: pdfUri,
     );
   }
 
@@ -139,5 +161,23 @@ class SummariesStorage {
     final file = await _indexFile(uid);
     final jsonText = jsonEncode(items.map((e) => e.toJson()).toList());
     await file.writeAsString(jsonText);
+  }
+
+  static Future<SummarizedAudio?> updatePdfUri({
+    required String? uid,
+    required SummarizedAudio item,
+    required String? pdfUri,
+  }) async {
+    final items = await load(uid);
+
+    final index = items.indexWhere(
+      (e) => e.createdAtMs == item.createdAtMs && e.filePath == item.filePath,
+    );
+    if (index < 0) return null;
+
+    final updated = items[index].copyWith(pdfUri: pdfUri);
+    final next = [...items]..[index] = updated;
+    await save(uid, next);
+    return updated;
   }
 }

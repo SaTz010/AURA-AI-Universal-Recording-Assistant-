@@ -1,10 +1,12 @@
 import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 class PdfGenerator {
-  static Future<File?> generateSummaryPdf({
+  static Future<Uint8List?> generateSummaryPdfBytes({
     required String fileName,
     required String category,
     required String summary,
@@ -13,6 +15,8 @@ class PdfGenerator {
     required double cost,
   }) async {
     try {
+      // Keep `cost` in the signature for backward compatibility, but we no
+      // longer render costs in user-visible exports.
       final pdf = pw.Document();
 
       // Create PDF content
@@ -24,10 +28,7 @@ class PdfGenerator {
             // Title
             pw.Text(
               'Audio Summary Report',
-              style: pw.TextStyle(
-                fontSize: 24,
-                fontWeight: pw.FontWeight.bold,
-              ),
+              style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 20),
 
@@ -63,11 +64,6 @@ class PdfGenerator {
                     'Generated: ${_formatDateTime(DateTime.now())}',
                     style: const pw.TextStyle(fontSize: 11),
                   ),
-                  pw.SizedBox(height: 4),
-                  pw.Text(
-                    'Cost: \$${cost.toStringAsFixed(4)}',
-                    style: const pw.TextStyle(fontSize: 11),
-                  ),
                 ],
               ),
             ),
@@ -76,31 +72,19 @@ class PdfGenerator {
             // Summary section
             pw.Text(
               'Summary',
-              style: pw.TextStyle(
-                fontSize: 16,
-                fontWeight: pw.FontWeight.bold,
-              ),
+              style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 8),
-            pw.Paragraph(
-              text: summary,
-              textAlign: pw.TextAlign.justify,
-            ),
+            pw.Paragraph(text: summary, textAlign: pw.TextAlign.justify),
             pw.SizedBox(height: 20),
 
             // Transcript section
             pw.Text(
               'Full Transcript',
-              style: pw.TextStyle(
-                fontSize: 16,
-                fontWeight: pw.FontWeight.bold,
-              ),
+              style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 8),
-            pw.Paragraph(
-              text: transcript,
-              textAlign: pw.TextAlign.justify,
-            ),
+            pw.Paragraph(text: transcript, textAlign: pw.TextAlign.justify),
 
             // Translation section if available
             if (translation != null && translation.isNotEmpty) ...[
@@ -113,14 +97,36 @@ class PdfGenerator {
                 ),
               ),
               pw.SizedBox(height: 8),
-              pw.Paragraph(
-                text: translation,
-                textAlign: pw.TextAlign.justify,
-              ),
+              pw.Paragraph(text: translation, textAlign: pw.TextAlign.justify),
             ],
           ],
         ),
       );
+
+      return pdf.save();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<File?> generateSummaryPdf({
+    required String fileName,
+    required String category,
+    required String summary,
+    required String transcript,
+    required String? translation,
+    required double cost,
+  }) async {
+    try {
+      final bytes = await generateSummaryPdfBytes(
+        fileName: fileName,
+        category: category,
+        summary: summary,
+        transcript: transcript,
+        translation: translation,
+        cost: cost,
+      );
+      if (bytes == null) return null;
 
       // Save PDF to documents directory
       final dir = await getApplicationDocumentsDirectory();
@@ -130,7 +136,7 @@ class PdfGenerator {
 
       // Create directory if it doesn't exist
       await pdfFile.parent.create(recursive: true);
-      await pdfFile.writeAsBytes(await pdf.save());
+      await pdfFile.writeAsBytes(bytes);
 
       return pdfFile;
     } catch (e) {
@@ -139,8 +145,21 @@ class PdfGenerator {
   }
 
   static String _formatDateTime(DateTime dateTime) {
-    final monthNames = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
-                        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final monthNames = [
+      '',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
     final month = monthNames[dateTime.month];
     final day = dateTime.day;
     final year = dateTime.year;
@@ -151,11 +170,13 @@ class PdfGenerator {
 
   static String _sanitizeFileName(String fileName) {
     // Remove file extension if present
-    final name = fileName.contains('.') 
+    final name = fileName.contains('.')
         ? fileName.substring(0, fileName.lastIndexOf('.'))
         : fileName;
-    
+
     // Replace invalid characters
-    return name.replaceAll(RegExp(r'[^\w\s-]'), '_').replaceAll(RegExp(r'\s+'), '_');
+    return name
+        .replaceAll(RegExp(r'[^\w\s-]'), '_')
+        .replaceAll(RegExp(r'\s+'), '_');
   }
 }

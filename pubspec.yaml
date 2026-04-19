@@ -46,6 +46,7 @@ dependencies:
   shared_preferences: ^2.5.3
   flutter_svg: ^2.2.0
   pdf: ^3.10.8
+  printing: ^5.14.2
   share_plus: ^10.0.2
   dio: ^5.3.0
   file_picker: ^8.1.7
