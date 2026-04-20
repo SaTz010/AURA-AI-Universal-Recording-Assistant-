@@ -10,7 +10,8 @@ plugins {
 
 android {
     namespace = "com.example.aura"
-    compileSdk = flutter.compileSdkVersion
+    // Needed for Android 12 SplashScreen APIs referenced by values-v31 resources.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -28,7 +29,7 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
@@ -40,6 +41,11 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+}
+
+dependencies {
+    // Provides `postSplashScreenTheme` attribute used by Android 12 splash resources.
+    implementation("androidx.core:core-splashscreen:1.0.1")
 }
 
 flutter {

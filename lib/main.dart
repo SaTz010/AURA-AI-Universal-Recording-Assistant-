@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'screens/auth_screen.dart';
-import 'screens/initial_animation.dart';
+import 'screens/app_entry.dart';
 import 'screens/history_screen.dart';
 import 'screens/legal_screen.dart';
 import 'screens/placeholder_screen.dart';
@@ -70,7 +70,7 @@ class _MyAppState extends State<MyApp> {
               theme: buildAuraLightTheme(),
               darkTheme: buildAuraDarkTheme(),
               themeMode: _themeNotifier.themeMode,
-              home: const AuraSplashScreen(),
+              home: const AuraAppEntry(),
               routes: {
                 '/auth': (context) => const AuraAuthScreen(),
                 '/home': (context) => const MainTabsScreen(initialIndex: 0),
