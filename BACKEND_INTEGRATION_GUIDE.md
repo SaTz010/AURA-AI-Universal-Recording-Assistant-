@@ -37,7 +37,7 @@ Your Flutter app is now fully integrated with the FastAPI audio processing backe
 ### Endpoint Configuration
 ```dart
 // lib/services/api_service.dart
-static const String _baseUrl = 'http://192.168.1.74:8000';
+static const String _baseUrl = 'https://backendforaura.onrender.com';
 static const String _processAudioEndpoint = '/process-audio';
 ```
 
@@ -146,7 +146,7 @@ final mockResponse = AudioProcessResponse(
 Ensure the FastAPI backend is running:
 ```bash
 # Backend should be accessible at:
-curl -X POST http://192.168.1.74:8000/process-audio
+curl -X POST https://backendforaura.onrender.com/process-audio
 ```
 
 ### 3. Test Scenarios
@@ -162,19 +162,23 @@ curl -X POST http://192.168.1.74:8000/process-audio
 ### 1. Move Base URL to Config
 Instead of hardcoding the IP address, use environment variables:
 
+In this app, the base URL is configured via `--dart-define` and read in `ApiService`:
+
 ```dart
-// lib/config/api_config.dart
-class ApiConfig {
-  static const String baseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'http://192.168.1.74:8000',
-  );
-}
+static const String _baseUrl = String.fromEnvironment(
+  'AURA_API_BASE_URL',
+  defaultValue: 'https://backendforaura.onrender.com',
+);
 ```
 
-Build with:
+Run/build against the hosted backend:
 ```bash
-flutter run --dart-define=API_BASE_URL=https://api.prod.example.com
+flutter run --dart-define=AURA_API_BASE_URL=https://backendforaura.onrender.com
+```
+
+Run against a local backend (example):
+```bash
+flutter run --dart-define=AURA_API_BASE_URL=http://192.168.1.74:8000
 ```
 
 ### 2. Add Request Signing (if needed)
@@ -236,9 +240,11 @@ if (!await file.exists()) {
 **Cause**: Backend not running or wrong IP address
 **Solution**:
 ```bash
-# Test connectivity
-ping 192.168.1.74
-curl -X POST http://192.168.1.74:8000/health
+# Hosted backend
+curl https://backendforaura.onrender.com/health
+
+# Local backend (example)
+curl http://192.168.1.74:8000/health
 ```
 
 ## Performance Optimization
@@ -348,7 +354,7 @@ GET /health → returns {"status": "ok"}
 5. ✅ **Integration complete**: Recordings screen → API → Results
 
 Ready to test with real backend! Just ensure:
-- FastAPI server is running at `http://192.168.1.74:8000`
+- FastAPI server is running at `https://backendforaura.onrender.com` (or pass `--dart-define=AURA_API_BASE_URL=...` for local)
 - `/process-audio` endpoint is implemented
 - Network connection between Flutter app and backend is available
 

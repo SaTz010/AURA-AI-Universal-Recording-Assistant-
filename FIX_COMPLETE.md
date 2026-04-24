@@ -74,7 +74,7 @@ Core App Files Analysis:
 
 ## Ready to Test
 
-The app is **now fully compiled and ready to test** with your FastAPI backend:
+The app is **now fully compiled and ready to test** with your FastAPI backend.
 
 ```bash
 cd /path/to/aura
@@ -82,13 +82,18 @@ flutter run
 ```
 
 **Test Procedure**:
-1. Start FastAPI backend: `uvicorn main:app --host 192.168.1.74 --port 8000`
+1. (Hosted) Ensure the Render backend is running at `https://backendforaura.onrender.com`
 2. Run Flutter app: `flutter run`
 3. Navigate to Recordings screen
 4. Tap "Summarize" on any recording
 5. Select a category
 6. Watch "Processing..." screen
 7. See results displayed
+
+**Optional (Local backend instead):**
+1. Start FastAPI backend: `uvicorn main:app --host 192.168.1.74 --port 8000`
+2. Run Flutter app with override:
+   - `flutter run --dart-define=AURA_API_BASE_URL=http://192.168.1.74:8000`
 
 ---
 

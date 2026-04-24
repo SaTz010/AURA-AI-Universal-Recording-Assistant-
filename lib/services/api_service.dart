@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -27,7 +28,7 @@ class ApiService {
   /// Base URL of the FastAPI backend.
   static const String _baseUrl = String.fromEnvironment(
     'AURA_API_BASE_URL',
-    defaultValue: 'http://192.168.1.74:8000',
+    defaultValue: 'https://backendforaura.onrender.com',
   );
 
   /// Endpoint for audio processing.
@@ -64,7 +65,7 @@ class ApiService {
       LogInterceptor(
         requestBody: true,
         responseBody: true,
-        logPrint: (obj) => print('[Dio] $obj'),
+        logPrint: (obj) => developer.log('[Dio] $obj', name: 'ApiService'),
       ),
     );
   }

@@ -54,7 +54,7 @@ Your Flutter app now has **complete integration** with the FastAPI backend for a
 #### 1. `lib/services/api_service.dart` (325 lines)
 **Purpose**: HTTP client for FastAPI communication
 **Key Features**:
-- Base URL: `http://192.168.1.74:8000`
+- Base URL: `https://backendforaura.onrender.com`
 - Endpoint: `POST /process-audio`
 - Multipart request handling
 - 120-second timeout (configurable)
@@ -213,7 +213,7 @@ User Action Flow:
 Ensure FastAPI server running:
 ```bash
 # Backend should be accessible at:
-http://192.168.1.74:8000/process-audio
+https://backendforaura.onrender.com/process-audio
 
 # Endpoint must accept:
 POST /process-audio
@@ -294,7 +294,7 @@ static const Duration _requestTimeout = Duration(seconds: 180);
 
 ### Multipart Request Format
 ```
-POST http://192.168.1.74:8000/process-audio HTTP/1.1
+POST https://backendforaura.onrender.com/process-audio HTTP/1.1
 Content-Type: multipart/form-data; boundary=---
 
 -----
@@ -420,7 +420,7 @@ Implemented error types:
 - [x] Documentation created
 
 ### Pre-Testing Checklist
-- [ ] FastAPI backend running at `http://192.168.1.74:8000`
+- [ ] FastAPI backend running at `https://backendforaura.onrender.com`
 - [ ] `/process-audio` endpoint implemented and tested
 - [ ] Valid test audio file available
 - [ ] Network connectivity verified

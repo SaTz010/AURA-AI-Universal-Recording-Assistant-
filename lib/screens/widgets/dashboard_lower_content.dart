@@ -11,6 +11,7 @@ import '../../services/recordings_library_events.dart';
 import '../../services/recordings_storage.dart';
 import '../../services/summaries_library_events.dart';
 import '../../services/summaries_storage.dart';
+import '../../services/wake_backend.dart';
 import '../../theme/aura_theme.dart';
 import '../../theme/aura_tokens.dart';
 import '../summarized_audio_detail_screen.dart';
@@ -821,7 +822,12 @@ class _RecentExpandableTile extends StatelessWidget {
                               tooltip: 'Forward 15s',
                             ),
                             IconButton(
-                              onPressed: onViewSummary ?? onSummarize,
+                              onPressed: (onViewSummary ?? onSummarize) == null
+                                  ? null
+                                  : () {
+                                      wakeBackend();
+                                      (onViewSummary ?? onSummarize)?.call();
+                                    },
                               icon: Icon(
                                 onViewSummary != null
                                     ? Icons.visibility_rounded

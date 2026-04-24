@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/aura_theme.dart';
 import '../../theme/aura_tokens.dart';
+import '../../services/wake_backend.dart';
 
 class MainBottomNav extends StatelessWidget {
   final int selectedIndex;
@@ -70,7 +71,10 @@ class MainBottomNav extends StatelessWidget {
               child: NavigationBar(
                 height: navHeight,
                 selectedIndex: selectedIndex,
-                onDestinationSelected: onTap,
+                onDestinationSelected: (index) {
+                  wakeBackend();
+                  onTap(index);
+                },
                 labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
                 destinations: const [
                   NavigationDestination(

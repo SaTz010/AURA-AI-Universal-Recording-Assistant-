@@ -13,7 +13,7 @@
 ## API Endpoint
 
 ```
-POST http://192.168.1.74:8000/process-audio
+POST https://backendforaura.onrender.com/process-audio
 Content-Type: multipart/form-data
 
 Input:
@@ -134,7 +134,7 @@ _dio = Dio(
 
 ## Testing Checklist
 
-- [ ] Backend is running at `http://192.168.1.74:8000`
+- [ ] Backend is running at `https://backendforaura.onrender.com`
 - [ ] `/process-audio` endpoint exists and accepts POST
 - [ ] Endpoint accepts multipart/form-data with audio, category, detail
 - [ ] Endpoint returns valid JSON with transcript, summary, cost
@@ -190,7 +190,7 @@ A: Increase `_requestTimeout` if backend needs longer. Or optimize backend proce
 A: Ensure audio file path is valid. File must exist before upload.
 
 **Q: Can't connect to backend?**
-A: Verify IP address, check firewall, test with `ping 192.168.1.74`
+A: Verify the URL is correct, check internet access, and confirm the Render service is running.
 
 **Q: Results not showing?**
 A: Check if response JSON matches expected schema (transcript, summary, cost required).

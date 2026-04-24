@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
+import '../services/wake_backend.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
 import 'recording_session_screen.dart';
@@ -455,6 +456,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       GestureDetector(
                         onTap: () {
                           HapticFeedback.mediumImpact();
+                          wakeBackend();
                           _openRecordingSession();
                         },
                         child: ScaleTransition(
@@ -530,8 +532,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     ),
                     const SizedBox(height: AuraSpacing.lg),
                     DashboardLowerContent(
-                      onUploadAudio: _showUploadSheet,
-                      onSummarize: () => _selectTab(2),
+                      onUploadAudio: () {
+                        wakeBackend();
+                        _showUploadSheet();
+                      },
+                      onSummarize: () {
+                        wakeBackend();
+                        _selectTab(2);
+                      },
                       onViewAllRecent: () => _selectTab(1),
                       onRecentFileTap: (_) => _selectTab(1),
                     ),
@@ -540,7 +548,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
             ],
           ),
-        ),
+        ), 
       ),
       Positioned(
         top: 0,
