@@ -1,15 +1,18 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../providers/auth_provider.dart';
 import '../services/api_service.dart';
+import '../services/recordings_library_events.dart';
 import '../services/recordings_storage.dart';
 import '../services/summaries_library_events.dart';
 import '../services/summaries_storage.dart';
 import 'summarized_audio_detail_screen.dart';
+import 'widgets/aura_skeleton.dart';
 import 'widgets/summarization_flow.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
@@ -35,13 +38,16 @@ class SummaryScreen extends StatefulWidget {
 
 class _SummaryScreenState extends State<SummaryScreen> {
   String? _effectiveUid;
+  bool _hasLoadedOnce = false;
 
   late final ApiService _apiService;
 
   late final VoidCallback _summariesListener;
+  late final VoidCallback _recordingsListener;
 
   bool _isLoadingRecordings = true;
   bool _isLoadingSummaries = true;
+  bool _isPickingUpload = false;
   List<_AudioChoice> _recordings = const [];
   List<SummarizedAudio> _summaries = const [];
 
@@ -59,12 +65,17 @@ class _SummaryScreenState extends State<SummaryScreen> {
     };
     SummariesLibraryEvents.revision.addListener(_summariesListener);
 
-    unawaited(_loadAll());
+    _recordingsListener = () {
+      if (!mounted) return;
+      unawaited(_loadRecordings());
+    };
+    RecordingsLibraryEvents.revision.addListener(_recordingsListener);
   }
 
   @override
   void dispose() {
     SummariesLibraryEvents.revision.removeListener(_summariesListener);
+    RecordingsLibraryEvents.revision.removeListener(_recordingsListener);
     _apiService.dispose();
     super.dispose();
   }
@@ -126,9 +137,13 @@ class _SummaryScreenState extends State<SummaryScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final authProvider = AuraAuthProvider.of(context);
+    if (!authProvider.initialized) return;
     final nextUid = authProvider.isGuest ? null : authProvider.user?.uid;
-    if (nextUid == _effectiveUid) return;
+    final didUserChange = nextUid != _effectiveUid;
+    if (!didUserChange && _hasLoadedOnce) return;
+
     _effectiveUid = nextUid;
+    _hasLoadedOnce = true;
     _selected = null;
     _isLoadingRecordings = true;
     _isLoadingSummaries = true;
@@ -179,6 +194,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
   }
 
   Future<void> _loadSummaries() async {
+    final start = DateTime.now();
+    const minSkeletonDuration = Duration(milliseconds: 250);
+
     final items = await SummariesStorage.load(_effectiveUid);
 
     // Keep only entries whose audio still exists.
@@ -190,6 +208,11 @@ class _SummaryScreenState extends State<SummaryScreen> {
     }
 
     existing.sort((a, b) => b.createdAtMs.compareTo(a.createdAtMs));
+
+    final elapsed = DateTime.now().difference(start);
+    if (elapsed < minSkeletonDuration) {
+      await Future<void>.delayed(minSkeletonDuration - elapsed);
+    }
 
     if (!mounted) return;
     setState(() {
@@ -286,7 +309,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              'Choose an audio',
+                              'Select a recording',
                               style: AuraTypography.titleLarge(sheetColors.textPrimary),
                             ),
                           ),
@@ -397,6 +420,63 @@ class _SummaryScreenState extends State<SummaryScreen> {
     return match.first;
   }
 
+  Future<void> _pickAndProcessUploadedAudio(AuraThemeColors colors) async {
+    if (_isPickingUpload) return;
+    setState(() => _isPickingUpload = true);
+
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const [
+          'm4a',
+          'mp3',
+          'wav',
+          'aac',
+          'flac',
+          'ogg',
+          'opus',
+        ],
+      );
+
+      if (!mounted) return;
+      if (result == null || result.files.isEmpty) return;
+
+      final file = result.files.single;
+      final audioPath = file.path;
+      if (audioPath == null || audioPath.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Selected file path is not available on this platform'),
+            backgroundColor: colors.surface,
+          ),
+        );
+        return;
+      }
+
+      await SummarizationFlow.summarizeAndOpen(
+        context: context,
+        apiService: _apiService,
+        uid: _effectiveUid,
+        audioPath: audioPath,
+        audioFileName: file.name,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Unable to open file picker'),
+          backgroundColor: colors.surface,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isPickingUpload = false);
+      } else {
+        _isPickingUpload = false;
+      }
+    }
+  }
+
   Future<void> _startSummarizeFlow(AuraThemeColors colors) async {
     final selected = await _openChooseSheet(colors);
     if (!mounted) return;
@@ -430,6 +510,52 @@ class _SummaryScreenState extends State<SummaryScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
+    final authProvider = AuraAuthProvider.of(context);
+
+    if (authProvider.isGuest) {
+      return Scaffold(
+        backgroundColor: colors.background,
+        appBar: AppBar(
+          backgroundColor: colors.background,
+          surfaceTintColor: Colors.transparent,
+          scrolledUnderElevation: 0,
+          elevation: 0,
+          automaticallyImplyLeading: false,
+          title: Text('Summarize', style: AuraTypography.titleLarge(colors.textPrimary)),
+          centerTitle: false,
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(AuraSpacing.xl),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.lock_person_rounded, size: 56, color: colors.iconDefault),
+                const SizedBox(height: AuraSpacing.base),
+                Text(
+                  'Login to summarize',
+                  style: AuraTypography.titleMedium(colors.textPrimary),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: AuraSpacing.sm),
+                Text(
+                  'You are currently using guest mode.',
+                  style: AuraTypography.bodyMedium(colors.textSecondary),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: AuraSpacing.lg),
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
+                  },
+                  child: const Text('Go to Login'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -464,35 +590,22 @@ class _SummaryScreenState extends State<SummaryScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: colors.surfaceElevated,
-                        ),
-                        child: Icon(
-                          Icons.auto_awesome_rounded,
-                          color: colors.textTertiary,
-                        ),
-                      ),
+                      Icon(Icons.auto_awesome_rounded, color: colors.accent, size: 24),
                       const SizedBox(width: AuraSpacing.md),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Choose an audio to summarize',
+                              'Summarize an audio',
                               style: AuraTypography.titleSmall(colors.textPrimary),
                             ),
-                            const SizedBox(height: 2),
+                            const SizedBox(height: 4),
                             Text(
-                              _selected == null
-                                  ? 'No audio selected'
-                                  : _displayTitle(_selected!.fileName),
+                              'AI-powered summaries from any audio.',
                               style: AuraTypography.caption(colors.textSecondary),
-                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
@@ -532,9 +645,22 @@ class _SummaryScreenState extends State<SummaryScreen> {
                     ),
                   ],
                   const SizedBox(height: AuraSpacing.lg),
-                  ElevatedButton(
-                    onPressed: _isLoadingRecordings ? null : () => _startSummarizeFlow(colors),
-                    child: Text(_isLoadingRecordings ? 'Loading…' : 'Choose audio'),
+                  _SummarizeOptionTile(
+                    icon: Icons.library_music_rounded,
+                    label: _isLoadingRecordings ? 'Loading…' : 'Choose recording',
+                    sublabel: 'Pick from your saved recordings',
+                    onTap: _isLoadingRecordings
+                        ? null
+                        : () => _startSummarizeFlow(colors),
+                  ),
+                  const SizedBox(height: AuraSpacing.sm),
+                  _SummarizeOptionTile(
+                    icon: Icons.file_upload_outlined,
+                    label: _isPickingUpload ? 'Picking…' : 'Import audio',
+                    sublabel: 'Upload a file from this device',
+                    onTap: _isPickingUpload
+                        ? null
+                        : () => _pickAndProcessUploadedAudio(colors),
                   ),
                 ],
               ),
@@ -546,16 +672,20 @@ class _SummaryScreenState extends State<SummaryScreen> {
             ),
             const SizedBox(height: AuraSpacing.sm),
             Expanded(
-              child: _isLoadingSummaries
-                  ? Center(child: CircularProgressIndicator(color: colors.accent))
-                  : _summaries.isEmpty
-                      ? Center(
-                          child: Text(
-                            'No summarized audios yet',
-                            style: AuraTypography.bodyMedium(colors.textSecondary),
-                          ),
-                        )
-                      : ListView.separated(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: _isLoadingSummaries
+                    ? const _SummariesListSkeleton(key: ValueKey('skeleton'))
+                    : _summaries.isEmpty
+                        ? Center(
+                            key: const ValueKey('empty'),
+                            child: Text(
+                              'No summarized audios yet',
+                              style: AuraTypography.bodyMedium(colors.textSecondary),
+                            ),
+                          )
+                        : ListView.separated(
+                            key: const ValueKey('content'),
                           padding: const EdgeInsets.only(bottom: AuraSpacing.lg),
                           separatorBuilder: (context, index) =>
                               const SizedBox(height: AuraSpacing.sm),
@@ -635,6 +765,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
                             );
                           },
                         ),
+              ),
             ),
           ],
         ),
@@ -648,6 +779,144 @@ extension _IterableFirstOrNull<E> on Iterable<E> {
     final it = iterator;
     if (!it.moveNext()) return null;
     return it.current;
+  }
+}
+
+class _SummariesListSkeleton extends StatelessWidget {
+  const _SummariesListSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AuraThemeColors.of(context);
+    return AuraSkeletonGroup(
+      child: ListView.separated(
+        padding: const EdgeInsets.only(bottom: AuraSpacing.lg),
+        separatorBuilder: (context, index) =>
+            const SizedBox(height: AuraSpacing.sm),
+        itemCount: 4,
+        itemBuilder: (context, index) {
+          return Container(
+            decoration: BoxDecoration(
+              color: colors.surface,
+              borderRadius: AuraRadius.mdBr,
+              border: Border.all(color: colors.border),
+            ),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AuraSpacing.lg,
+              vertical: AuraSpacing.md,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          AuraSkeletonBox(width: 180, height: 14),
+                          SizedBox(height: 8),
+                          AuraSkeletonBox(width: 110, height: 10),
+                        ],
+                      ),
+                    ),
+                    SizedBox(width: AuraSpacing.md),
+                    AuraSkeletonBox(width: 22, height: 22),
+                  ],
+                ),
+                SizedBox(height: AuraSpacing.sm),
+                AuraSkeletonBox(height: 10),
+                SizedBox(height: 6),
+                AuraSkeletonBox(height: 10),
+                SizedBox(height: 6),
+                AuraSkeletonBox(width: 220, height: 10),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _SummarizeOptionTile extends StatelessWidget {
+  const _SummarizeOptionTile({
+    required this.icon,
+    required this.label,
+    required this.sublabel,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String sublabel;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AuraThemeColors.of(context);
+    final disabled = onTap == null;
+
+    return Material(
+      color: colors.surfaceElevated,
+      borderRadius: AuraRadius.mdBr,
+      child: InkWell(
+        onTap: disabled
+            ? null
+            : () {
+                HapticFeedback.lightImpact();
+                onTap!();
+              },
+        borderRadius: AuraRadius.mdBr,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: AuraRadius.mdBr,
+            border: Border.all(color: colors.border),
+          ),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AuraSpacing.md,
+            vertical: AuraSpacing.md,
+          ),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                color: disabled ? colors.textTertiary : colors.accent,
+                size: 22,
+              ),
+              const SizedBox(width: AuraSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: AuraTypography.bodyMedium(
+                        disabled ? colors.textTertiary : colors.textPrimary,
+                      ).copyWith(fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      sublabel,
+                      style: AuraTypography.caption(colors.textSecondary),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AuraSpacing.sm),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: colors.textTertiary,
+                size: 20,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

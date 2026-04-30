@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:audio_waveforms/audio_waveforms.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
+import '../services/recording_service.dart';
 import '../services/recordings_library_events.dart';
 import '../services/recordings_storage.dart';
 import '../theme/aura_theme.dart';
@@ -17,92 +18,24 @@ class RecordingSessionScreen extends StatefulWidget {
   State<RecordingSessionScreen> createState() => _RecordingSessionScreenState();
 }
 
-class _RecordingSessionScreenState extends State<RecordingSessionScreen>
-    with WidgetsBindingObserver {
-  final Stopwatch _recordingStopwatch = Stopwatch();
-  final RecorderController _recorderController = RecorderController();
+class _RecordingSessionScreenState extends State<RecordingSessionScreen> {
+  final RecordingService _service = RecordingService.instance;
 
   String? _effectiveUid;
   bool _hasStarted = false;
-
-  static const RecorderSettings _speechRecorderSettings = RecorderSettings(
-    // 44.1kHz AAC in MP4 is broadly supported across Android OEMs.
-    // 16kHz AAC can produce empty/corrupt files on some devices.
-    sampleRate: 44100,
-    bitRate: 128000,
-    androidEncoderSettings: AndroidEncoderSettings(androidEncoder: AndroidEncoder.aacLc),
-    iosEncoderSettings: IosEncoderSetting(iosEncoder: IosEncoder.kAudioFormatMPEG4AAC),
-  );
-
-  Timer? _ticker;
-  String? _recordingPath;
-  Duration _elapsedDuration = Duration.zero;
   bool _isInitializing = true;
-  bool _isRecording = false;
-  bool _isBusy = false;
   bool _isStopping = false;
 
-  Future<void> _cancelRecording() async {
-    if (_isBusy || _isStopping) return;
-
-    // If we're not actively recording, Cancel behaves like a normal back.
-    if (!_isRecording) {
-      if (mounted) Navigator.pop(context);
-      return;
-    }
-
-    _isBusy = true;
-    if (mounted) {
-      setState(() => _isStopping = true);
-    }
-
-    // Stop timers/UI immediately.
-    _recordingStopwatch.stop();
-
-    try {
-      // Ensure we fully finalize the platform recorder before touching the file.
-      await _stopRecorderGracefully();
-
-      final path = _recordingPath;
-      if (path != null) {
-        try {
-          final file = File(path);
-          if (await file.exists()) {
-            await file.delete();
-          }
-        } catch (_) {
-          // Best effort deletion.
-        }
-      }
-    } catch (_) {
-      // Best effort cancel.
-    } finally {
-      _recordingStopwatch
-        ..stop()
-        ..reset();
-
-      if (mounted) {
-        setState(() {
-          _isRecording = false;
-          _isStopping = false;
-        });
-        Navigator.pop(context);
-      }
-      _isBusy = false;
+  void _onForegroundData(Object data) {
+    if (data == 'stop') {
+      unawaited(_stopRecording());
     }
   }
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    _ticker = Timer.periodic(const Duration(milliseconds: 200), (_) {
-      if (!mounted) return;
-      if (!_isRecording) return;
-      setState(() {
-        _elapsedDuration = _recordingStopwatch.elapsed;
-      });
-    });
+    FlutterForegroundTask.addTaskDataCallback(_onForegroundData);
   }
 
   @override
@@ -117,92 +50,70 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
 
     if (_hasStarted) return;
     _hasStarted = true;
-    unawaited(_startRecordingSession());
+
+    if (_service.isRecording) {
+      // Rehydrate UI from existing session (e.g. user reopened the app).
+      _isInitializing = false;
+    } else {
+      unawaited(_startRecordingSession());
+    }
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _ticker?.cancel();
-    _recordingStopwatch.stop();
-    _recorderController.dispose();
+    FlutterForegroundTask.removeTaskDataCallback(_onForegroundData);
     super.dispose();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.detached && _isRecording) {
-      unawaited(_stopRecording(popWhenDone: false));
-    }
-  }
-
   Future<void> _startRecordingSession() async {
-    setState(() {
-      _isInitializing = true;
-    });
+    setState(() => _isInitializing = true);
 
-    var recordingStarted = false;
-
-    try {
-      final hasPermission = await _recorderController.checkPermission();
-      if (!hasPermission) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Microphone permission denied')),
-        );
-        Navigator.pop(context);
-        return;
-      }
-
-      final dir = await RecordingsStorage.getUserRecordingsDir(_effectiveUid);
-      final filePath = '${dir.path}/recording_${DateTime.now().millisecondsSinceEpoch}.m4a';
-
-      await _recorderController.record(
-        path: filePath,
-        recorderSettings: _speechRecorderSettings,
-      );
-      recordingStarted = true;
-      _recordingPath = filePath;
-      _recordingStopwatch
-        ..reset()
-        ..start();
-
-      if (!mounted) return;
-      setState(() {
-        _elapsedDuration = Duration.zero;
-        _isRecording = true;
-        _isInitializing = false;
-      });
-    } catch (error) {
-      if (recordingStarted) {
-        try {
-          await _recorderController.stop();
-        } catch (_) {}
-      }
+    final hasPerm = await _service.hasPermission();
+    if (!hasPerm) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error starting recording: $error')),
+        const SnackBar(content: Text('Microphone permission denied')),
       );
       Navigator.pop(context);
+      return;
     }
+
+    final notifPermission =
+        await FlutterForegroundTask.checkNotificationPermission();
+    if (notifPermission != NotificationPermission.granted) {
+      await FlutterForegroundTask.requestNotificationPermission();
+    }
+
+    final ok = await _service.start(_effectiveUid);
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to start recording')),
+      );
+      Navigator.pop(context);
+      return;
+    }
+
+    setState(() => _isInitializing = false);
   }
 
-  Future<void> _stopRecording({bool popWhenDone = true}) async {
-    if (_isBusy || !_isRecording) return;
-    _isBusy = true;
-
-    if (mounted) {
-      setState(() => _isStopping = true);
+  Future<void> _cancelRecording() async {
+    if (_isStopping) return;
+    if (!_service.isRecording) {
+      if (mounted) Navigator.pop(context);
+      return;
     }
 
-    // Stop the UI timer immediately so the app doesn't look "stuck recording"
-    // while the recorder finalizes the file.
-    _recordingStopwatch.stop();
-    if (mounted) {
-      setState(() {
-        _elapsedDuration = _recordingStopwatch.elapsed;
-      });
-    }
+    setState(() => _isStopping = true);
+    await _service.cancel();
+    if (!mounted) return;
+    setState(() => _isStopping = false);
+    Navigator.pop(context);
+  }
+
+  Future<void> _stopRecording() async {
+    if (_isStopping || !_service.isRecording) return;
+    setState(() => _isStopping = true);
 
     unawaited(Future<void>.delayed(const Duration(seconds: 6), () {
       if (!mounted || !_isStopping) return;
@@ -211,94 +122,52 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
       );
     }));
 
-    try {
-      final path = await _stopRecorderGracefully() ?? _recordingPath;
+    final path = await _service.stop();
+    if (!mounted) return;
 
-      _recordingStopwatch
-        ..stop()
-        ..reset();
+    if (path == null) {
+      setState(() => _isStopping = false);
+      Navigator.pop(context);
+      return;
+    }
 
-      if (!mounted) return;
-      setState(() {
-        _isRecording = false;
-      });
-
-      if (path == null || !popWhenDone) {
-        if (popWhenDone && mounted) {
-          Navigator.pop(context);
-        }
-        return;
-      }
-
-      final recordedFile = File(path);
-      final isReady = await _waitForRecordingFileReady(recordedFile);
-      if (!isReady) {
-        if (popWhenDone && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Recording could not be saved. Please try again.')),
-          );
-          Navigator.pop(context);
-        }
-        return;
-      }
-
-      final defaultName = await _getNextAuraRecordingBaseName();
-      if (!mounted) return;
-
-      final userInput = await _showRecordingNameDialog(defaultName);
-      final chosenBaseName = _sanitizeRecordingName(
-        userInput == null || userInput.trim().isEmpty ? defaultName : userInput,
-      );
-      final renamedPath = await _renameRecordingFile(recordedFile, chosenBaseName);
-      final finalName = renamedPath != null
-          ? File(renamedPath).path.split(RegExp(r'[\\/]')).last
-          : recordedFile.path.split(RegExp(r'[\\/]')).last;
-
-      if (!mounted) return;
-      RecordingsLibraryEvents.notifyChanged();
-      Navigator.pop(context, finalName);
-    } catch (error) {
-      if (!mounted) return;
+    final recordedFile = File(path);
+    final isReady = await _waitForRecordingFileReady(recordedFile);
+    if (!mounted) return;
+    if (!isReady) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error stopping recording: $error')),
+        const SnackBar(
+          content: Text('Recording could not be saved. Please try again.'),
+        ),
       );
-      if (popWhenDone) {
-        Navigator.pop(context);
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isStopping = false);
-      }
-      _isBusy = false;
+      setState(() => _isStopping = false);
+      Navigator.pop(context);
+      return;
     }
-  }
 
-  Future<String?> _stopRecorderGracefully() async {
-    // Important: Future.timeout does NOT cancel the underlying stop() call.
-    // If we proceed while the platform recorder is still finalizing, we can
-    // end up renaming/copying a file that's still being written, leading to
-    // corrupt recordings.
-    final stopFuture = _recorderController.stop();
+    final defaultName = await _getNextAuraRecordingBaseName();
+    if (!mounted) return;
 
-    try {
-      return await stopFuture.timeout(const Duration(seconds: 20));
-    } on TimeoutException {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Finalizing recording… please keep the app open.')),
-        );
-      }
-      // Wait for the original stop() to actually complete.
-      return await stopFuture;
-    }
+    final userInput = await _showRecordingNameDialog(defaultName);
+    final chosenBaseName = _sanitizeRecordingName(
+      userInput == null || userInput.trim().isEmpty ? defaultName : userInput,
+    );
+    final renamedPath =
+        await _renameRecordingFile(recordedFile, chosenBaseName);
+    final finalName = renamedPath != null
+        ? File(renamedPath).path.split(RegExp(r'[\\/]')).last
+        : recordedFile.path.split(RegExp(r'[\\/]')).last;
+
+    if (!mounted) return;
+    RecordingsLibraryEvents.notifyChanged();
+    setState(() => _isStopping = false);
+    Navigator.pop(context, finalName);
   }
 
   Future<bool> _waitForRecordingFileReady(File file) async {
     try {
       if (!await file.exists()) return false;
 
-      // Wait briefly for the encoder to flush. Some devices report 0 bytes
-      // immediately after stop() even though the file becomes valid shortly.
       const maxWait = Duration(seconds: 3);
       const interval = Duration(milliseconds: 150);
 
@@ -316,7 +185,6 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
             stableCount = 0;
           }
         }
-
         lastSize = size;
         await Future<void>.delayed(interval);
         waited += interval;
@@ -345,9 +213,9 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
       if (entry is! File || !entry.path.toLowerCase().endsWith('.m4a')) {
         continue;
       }
-
       final fileName = entry.path.split('/').last;
-      final baseName = fileName.replaceAll(RegExp(r'\.m4a$', caseSensitive: false), '');
+      final baseName =
+          fileName.replaceAll(RegExp(r'\.m4a$', caseSensitive: false), '');
       final match = auraPattern.firstMatch(baseName);
       if (match != null) {
         final parsed = int.tryParse(match.group(1) ?? '0') ?? 0;
@@ -356,8 +224,7 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
         }
       }
     }
-
-    return 'Aura_${maxIndex + 1}';
+    return 'AURA_${maxIndex + 1}';
   }
 
   String _sanitizeRecordingName(String name) {
@@ -383,7 +250,7 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
             textInputAction: TextInputAction.done,
             decoration: const InputDecoration(
               labelText: 'Recording name',
-              hintText: 'Aura_1',
+              hintText: 'AURA_1',
             ),
             onSubmitted: (value) => Navigator.pop(dialogContext, value),
           ),
@@ -402,8 +269,9 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
     );
   }
 
-  Future<String?> _renameRecordingFile(File originalFile, String preferredBaseName) async {
-    final safeBase = preferredBaseName.isEmpty ? 'Aura_1' : preferredBaseName;
+  Future<String?> _renameRecordingFile(
+      File originalFile, String preferredBaseName) async {
+    final safeBase = preferredBaseName.isEmpty ? 'AURA_1' : preferredBaseName;
     final dir = await RecordingsStorage.getUserRecordingsDir(_effectiveUid);
     var attempt = 0;
 
@@ -417,7 +285,6 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
           final renamed = await originalFile.rename(candidatePath);
           return renamed.path;
         } catch (_) {
-          // If rename fails (e.g., cross-device move or file lock), fall back to copy.
           try {
             await originalFile.copy(candidatePath);
             await originalFile.delete();
@@ -427,24 +294,23 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
           }
         }
       }
-
       attempt++;
     }
-
     return null;
   }
 
   @override
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
-    final displayedDuration = _elapsedDuration;
 
     return PopScope(
-      canPop: !_isRecording || _isInitializing,
+      canPop: !_service.isRecording || _isInitializing,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && _isRecording) {
+        if (!didPop && _service.isRecording) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Use Stop to save or Cancel to discard.')),
+            const SnackBar(
+              content: Text('Use Stop to save or Cancel to discard.'),
+            ),
           );
         }
       },
@@ -454,7 +320,7 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
           backgroundColor: colors.background,
           elevation: 0,
           leading: IconButton(
-            onPressed: _isRecording ? null : () => Navigator.pop(context),
+            onPressed: _service.isRecording ? null : () => Navigator.pop(context),
             icon: Icon(Icons.arrow_back_rounded, color: colors.textPrimary),
           ),
           title: Text(
@@ -487,7 +353,8 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFFFF4D4F).withValues(alpha: 0.35),
+                                  color: const Color(0xFFFF4D4F)
+                                      .withValues(alpha: 0.35),
                                   blurRadius: 10,
                                   spreadRadius: 2,
                                 ),
@@ -498,26 +365,35 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
                           Text(
                             'Recording in progress',
                             textAlign: TextAlign.center,
-                            style: AuraTypography.bodyLarge(colors.textSecondary).copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style:
+                                AuraTypography.bodyLarge(colors.textSecondary)
+                                    .copyWith(fontWeight: FontWeight.w600),
                           ),
                         ],
                       ),
                       const SizedBox(height: AuraSpacing.sm),
-                      Text(
-                        _formatRecordingTime(displayedDuration),
-                        textAlign: TextAlign.center,
-                        style: AuraTypography.displayLarge(colors.textPrimary).copyWith(
-                          letterSpacing: 2,
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
+                      ValueListenableBuilder<Duration>(
+                        valueListenable: _service.elapsedNotifier,
+                        builder: (context, elapsed, _) {
+                          return Text(
+                            _formatRecordingTime(elapsed),
+                            textAlign: TextAlign.center,
+                            style: AuraTypography.displayLarge(colors.textPrimary)
+                                .copyWith(
+                              letterSpacing: 2,
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                            ),
+                          );
+                        },
                       ),
                       const SizedBox(height: AuraSpacing.lg),
                       Expanded(
                         child: Center(
                           child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 420, maxHeight: 360),
+                            constraints: const BoxConstraints(
+                              maxWidth: 420,
+                              maxHeight: 360,
+                            ),
                             child: Container(
                               width: double.infinity,
                               padding: const EdgeInsets.symmetric(
@@ -533,31 +409,16 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
                               child: Column(
                                 children: [
                                   Expanded(
-                                    child: LayoutBuilder(
-                                      builder: (context, constraints) {
-                                        final waveformHeight = constraints.maxHeight.clamp(
-                                          160.0,
-                                          320.0,
-                                        );
-                                        return Align(
-                                          alignment: Alignment.center,
-                                          child: AudioWaveforms(
-                                            enableGesture: false,
-                                            size: Size(
-                                              constraints.maxWidth,
-                                              waveformHeight.toDouble(),
-                                            ),
-                                            recorderController: _recorderController,
-                                            waveStyle: WaveStyle(
-                                              waveColor: colors.accent,
-                                              extendWaveform: true,
-                                              showMiddleLine: false,
-                                              spacing: 3.4,
-                                              scaleFactor: 400,
-                                              waveThickness: 2.2,
-                                              waveformRenderMode: WaveformRenderMode.ltr,
-                                            ),
+                                    child: ValueListenableBuilder<List<double>>(
+                                      valueListenable:
+                                          _service.amplitudesNotifier,
+                                      builder: (context, amps, _) {
+                                        return CustomPaint(
+                                          painter: _LiveWaveformPainter(
+                                            amplitudes: amps,
+                                            color: colors.accent,
                                           ),
+                                          size: Size.infinite,
                                         );
                                       },
                                     ),
@@ -566,7 +427,9 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
                                   Text(
                                     'Recording your audio clearly and continuously.',
                                     textAlign: TextAlign.center,
-                                    style: AuraTypography.bodyMedium(colors.textSecondary),
+                                    style: AuraTypography.bodyMedium(
+                                      colors.textSecondary,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -579,21 +442,25 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
                         children: [
                           Expanded(
                             child: OutlinedButton.icon(
-                              onPressed: (_isBusy || _isStopping) ? null : _cancelRecording,
+                              onPressed: _isStopping ? null : _cancelRecording,
                               icon: const Icon(Icons.close_rounded),
                               label: const Text('Cancel'),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: colors.textPrimary,
                                 side: BorderSide(color: colors.border),
-                                padding: const EdgeInsets.symmetric(vertical: AuraSpacing.md),
-                                shape: RoundedRectangleBorder(borderRadius: AuraRadius.mdBr),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: AuraSpacing.md,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: AuraRadius.mdBr,
+                                ),
                               ),
                             ),
                           ),
                           const SizedBox(width: AuraSpacing.md),
                           Expanded(
                             child: ElevatedButton.icon(
-                              onPressed: (_isBusy || _isStopping) ? null : () => _stopRecording(),
+                              onPressed: _isStopping ? null : _stopRecording,
                               icon: const Icon(Icons.stop_rounded),
                               label: Text(_isStopping ? 'Stopping…' : 'Stop'),
                             ),
@@ -606,5 +473,54 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen>
               ),
       ),
     );
+  }
+}
+
+class _LiveWaveformPainter extends CustomPainter {
+  _LiveWaveformPainter({required this.amplitudes, required this.color});
+
+  final List<double> amplitudes;
+  final Color color;
+
+  static const double _barWidth = 2.2;
+  static const double _spacing = 3.4;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (amplitudes.isEmpty) return;
+
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = _barWidth
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    final centerY = size.height / 2;
+    final maxBars =
+        ((size.width + _spacing) / (_barWidth + _spacing)).floor();
+    final start = amplitudes.length > maxBars
+        ? amplitudes.length - maxBars
+        : 0;
+    final visible = amplitudes.sublist(start);
+
+    final totalWidth =
+        visible.length * _barWidth + (visible.length - 1) * _spacing;
+    var x = (size.width - totalWidth) / 2;
+    if (x < 0) x = 0;
+
+    for (final amp in visible) {
+      final h = (amp * size.height * 0.95).clamp(2.0, size.height);
+      canvas.drawLine(
+        Offset(x, centerY - h / 2),
+        Offset(x, centerY + h / 2),
+        paint,
+      );
+      x += _barWidth + _spacing;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _LiveWaveformPainter oldDelegate) {
+    return oldDelegate.amplitudes != amplitudes || oldDelegate.color != color;
   }
 }

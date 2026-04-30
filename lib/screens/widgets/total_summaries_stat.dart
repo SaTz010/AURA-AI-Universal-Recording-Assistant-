@@ -2,15 +2,19 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../services/summaries_library_events.dart';
 import '../../services/summaries_storage.dart';
 import '../../theme/aura_theme.dart';
 import '../../theme/aura_tokens.dart';
+import 'aura_skeleton.dart';
 
 class SummaryTotalsCard extends StatefulWidget {
-  const SummaryTotalsCard({super.key});
+  const SummaryTotalsCard({super.key, this.onTap});
+
+  final VoidCallback? onTap;
 
   @override
   State<SummaryTotalsCard> createState() => _SummaryTotalsCardState();
@@ -99,6 +103,9 @@ class _SummaryTotalsCardState extends State<SummaryTotalsCard> {
       setState(() => _isLoading = true);
     }
 
+    final start = DateTime.now();
+    const minSkeletonDuration = Duration(milliseconds: 250);
+
     try {
       final items = await SummariesStorage.load(_effectiveUid);
 
@@ -106,6 +113,13 @@ class _SummaryTotalsCardState extends State<SummaryTotalsCard> {
       for (final item in items) {
         if (File(item.filePath).existsSync()) {
           count++;
+        }
+      }
+
+      if (showLoading) {
+        final elapsed = DateTime.now().difference(start);
+        if (elapsed < minSkeletonDuration) {
+          await Future<void>.delayed(minSkeletonDuration - elapsed);
         }
       }
 
@@ -122,6 +136,13 @@ class _SummaryTotalsCardState extends State<SummaryTotalsCard> {
         _isLoading = false;
       });
     } catch (_) {
+      if (showLoading) {
+        final elapsed = DateTime.now().difference(start);
+        if (elapsed < minSkeletonDuration) {
+          await Future<void>.delayed(minSkeletonDuration - elapsed);
+        }
+      }
+
       _cacheByUidKey[_uidKey()] = _SummaryTotalsSnapshot(
         revision: SummariesLibraryEvents.revision.value,
         count: 0,
@@ -140,29 +161,39 @@ class _SummaryTotalsCardState extends State<SummaryTotalsCard> {
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
 
-    final valueText = _isLoading ? '—' : _summariesCount.toString();
-    final meta = _isLoading
-        ? 'Calculating…'
-        : _summariesCount == 0
-            ? 'No summaries yet'
-            : '$_summariesCount summaries';
+    final valueText = _summariesCount.toString();
+    final meta = _summariesCount == 0
+        ? 'No summaries yet'
+        : '$_summariesCount summaries';
 
-    return Column(
+    final body = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _MiniStatCard(
           icon: Icons.auto_awesome_rounded,
           label: 'Total summaries',
           value: valueText,
+          isLoading: _isLoading,
+          onTap: widget.onTap,
         ),
         const SizedBox(height: AuraSpacing.xs),
-        Text(
-          meta,
-          style: AuraTypography.caption(colors.textTertiary),
-          overflow: TextOverflow.ellipsis,
-        ),
+        _isLoading
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 3),
+                child: AuraSkeletonBox(width: 140, height: 10),
+              )
+            : Text(
+                meta,
+                style: AuraTypography.caption(colors.textTertiary),
+                overflow: TextOverflow.ellipsis,
+              ),
       ],
     );
+
+    if (_isLoading) {
+      return AuraSkeletonGroup(child: body);
+    }
+    return body;
   }
 }
 
@@ -183,36 +214,40 @@ class _MiniStatCard extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.value,
+    this.isLoading = false,
+    this.onTap,
   });
 
   final IconData icon;
   final String label;
   final String value;
+  final bool isLoading;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.surface,
+    return Material(
+      color: colors.surface,
+      borderRadius: AuraRadius.lgBr,
+      child: InkWell(
+        onTap: onTap == null
+            ? null
+            : () {
+                HapticFeedback.lightImpact();
+                onTap!();
+              },
         borderRadius: AuraRadius.lgBr,
-        border: Border.all(color: colors.border),
-        boxShadow: AuraElevation.low(Colors.black),
-      ),
-      padding: const EdgeInsets.all(AuraSpacing.md),
-      child: Row(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: colors.surfaceElevated,
-              border: Border.all(color: colors.border),
-            ),
-            child: Icon(icon, size: 18, color: colors.accent),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: AuraRadius.lgBr,
+            border: Border.all(color: colors.border),
           ),
+          padding: const EdgeInsets.all(AuraSpacing.md),
+          child: Row(
+        children: [
+          Icon(icon, size: 22, color: colors.accent),
           const SizedBox(width: AuraSpacing.sm),
           Expanded(
             child: Column(
@@ -223,18 +258,24 @@ class _MiniStatCard extends StatelessWidget {
                   style: AuraTypography.caption(colors.textSecondary),
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  value,
-                  style: AuraTypography.titleMedium(colors.textPrimary).copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
+                const SizedBox(height: 4),
+                isLoading
+                    ? const Padding(
+                        padding: EdgeInsets.only(top: 2, bottom: 2),
+                        child: AuraSkeletonBox(width: 56, height: 16),
+                      )
+                    : Text(
+                        value,
+                        style: AuraTypography.titleMedium(colors.textPrimary)
+                            .copyWith(fontWeight: FontWeight.w800),
+                        overflow: TextOverflow.ellipsis,
+                      ),
               ],
             ),
           ),
         ],
+      ),
+        ),
       ),
     );
   }

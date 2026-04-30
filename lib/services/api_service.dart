@@ -2,6 +2,7 @@ import 'dart:developer' as developer;
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:http_parser/http_parser.dart';
 
 import '../models/audio_process_response.dart';
 
@@ -86,6 +87,37 @@ class ApiService {
     return validCategories.contains(category);
   }
 
+  /// Maps a filename's extension to a Whisper-friendly Content-Type. Dio's
+  /// auto-detection is unreliable for `.m4a` (it can produce `audio/x-m4a` or
+  /// `application/octet-stream`), so we set the type explicitly for the
+  /// multipart upload.
+  static MediaType? _mediaTypeForFilename(String filename) {
+    final ext = filename.toLowerCase().split('.').last;
+    switch (ext) {
+      case 'm4a':
+      case 'mp4':
+        return MediaType('audio', 'mp4');
+      case 'mp3':
+      case 'mpga':
+      case 'mpeg':
+        return MediaType('audio', 'mpeg');
+      case 'wav':
+        return MediaType('audio', 'wav');
+      case 'flac':
+        return MediaType('audio', 'flac');
+      case 'ogg':
+      case 'oga':
+      case 'opus':
+        return MediaType('audio', 'ogg');
+      case 'webm':
+        return MediaType('audio', 'webm');
+      case 'aac':
+        return MediaType('audio', 'aac');
+      default:
+        return null; // fall back to Dio auto-detection
+    }
+  }
+
   /// Processes an audio file with the FastAPI backend.
   /// 
   /// Parameters:
@@ -116,6 +148,7 @@ class ApiService {
     required String audioPath,
     required String category,
     String? detail,
+    String? audioFileName,
     ProgressCallback? onProgress,
   }) async {
     // Validate audio file exists
@@ -140,6 +173,7 @@ class ApiService {
           audioPath: audioPath,
           category: category,
           detail: detail,
+          audioFileName: audioFileName,
           onProgress: onProgress,
         );
       } on ApiException {
@@ -167,14 +201,31 @@ class ApiService {
     required String audioPath,
     required String category,
     String? detail,
+    String? audioFileName,
     ProgressCallback? onProgress,
   }) async {
     try {
+      // Whisper detects the audio format from the multipart filename. On Android,
+      // FilePicker often copies picks into a cache dir with a name that drops the
+      // original extension (e.g. `audio_picker_8237.tmp`), which causes Whisper to
+      // reply "Invalid file format". Prefer the caller-supplied original name when
+      // available; otherwise fall back to the path basename.
+      final pathBasename = audioPath.split(RegExp(r'[\\/]')).last;
+      final filename = (audioFileName != null && audioFileName.trim().isNotEmpty)
+          ? audioFileName.trim()
+          : pathBasename;
+
+      // Explicit Content-Type for the multipart audio part. Dio's auto-detection
+      // can return `audio/x-m4a` or `application/octet-stream` for .m4a, both of
+      // which Whisper rejects. Mapping ourselves guarantees the right MIME type.
+      final contentType = _mediaTypeForFilename(filename);
+
       // Create multipart form data
       final formData = FormData.fromMap({
         'audio': await MultipartFile.fromFile(
           audioPath,
-          filename: File(audioPath).path.split(Platform.pathSeparator).last,
+          filename: filename,
+          contentType: contentType,
         ),
         'category': category,
         if (detail != null && detail.isNotEmpty) 'detail': detail,

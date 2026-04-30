@@ -8,6 +8,8 @@ class MainBottomNav extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onTap;
 
+  static const double _hideLabelsTextScaleThreshold = 1.6;
+
   const MainBottomNav({
     super.key,
     required this.selectedIndex,
@@ -19,7 +21,9 @@ class MainBottomNav extends StatelessWidget {
     final colors = AuraThemeColors.of(context);
     final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
     final navHeight = AuraSpacing.massive + AuraSpacing.base; // 80px
-    final bottomInset = MediaQuery.of(context).padding.bottom;
+    final bottomInset = MediaQuery.of(context).viewPadding.bottom;
+    final textScale = MediaQuery.textScalerOf(context).scale(1.0);
+    final hideLabels = textScale >= _hideLabelsTextScaleThreshold;
 
     const radius = BorderRadius.only(
       topLeft: Radius.circular(26),
@@ -43,7 +47,7 @@ class MainBottomNav extends StatelessWidget {
       child: ClipRRect(
         borderRadius: radius,
         child: Padding(
-          padding: EdgeInsets.only(bottom: bottomInset),
+          padding: EdgeInsets.only(bottom: bottomInset > 0 ? bottomInset : AuraSpacing.sm),
           child: SizedBox(
             height: navHeight,
             child: NavigationBarTheme(
@@ -75,7 +79,9 @@ class MainBottomNav extends StatelessWidget {
                   wakeBackend();
                   onTap(index);
                 },
-                labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+                labelBehavior: hideLabels
+                    ? NavigationDestinationLabelBehavior.alwaysHide
+                    : NavigationDestinationLabelBehavior.alwaysShow,
                 destinations: const [
                   NavigationDestination(
                     icon: Icon(Icons.home_rounded),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:file_picker/file_picker.dart';
@@ -11,6 +13,7 @@ import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
 import 'recording_session_screen.dart';
 import 'widgets/dashboard_lower_content.dart';
+import 'widgets/guest_block.dart';
 import 'widgets/summarization_flow.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -31,6 +34,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   bool _isPickingUpload = false;
 
   String _recordingStatus = '';
+  Timer? _recordingStatusTimer;
   bool _isOpeningRecording = false;
 
   @override
@@ -54,6 +58,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   @override
   void dispose() {
+    _recordingStatusTimer?.cancel();
     _pulseController.dispose();
     _micController.dispose();
     _apiService.dispose();
@@ -141,6 +146,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       _recordingStatus = 'Recording saved: $result';
     });
 
+    _recordingStatusTimer?.cancel();
+    _recordingStatusTimer = Timer(const Duration(seconds: 5), () {
+      if (!mounted) return;
+      setState(() => _recordingStatus = '');
+    });
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Recording saved: $result')),
     );
@@ -151,6 +162,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   void _showUploadSheet() {
+    if (AuraAuthProvider.of(context).isGuest) {
+      showSummarizeGuestBlock(context);
+      return;
+    }
     final colors = AuraThemeColors.of(context);
     showModalBottomSheet<void>(
       context: context,

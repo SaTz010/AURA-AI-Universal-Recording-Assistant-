@@ -15,6 +15,8 @@ import '../../services/wake_backend.dart';
 import '../../theme/aura_theme.dart';
 import '../../theme/aura_tokens.dart';
 import '../summarized_audio_detail_screen.dart';
+import 'aura_skeleton.dart';
+import 'guest_block.dart';
 import 'summarization_flow.dart';
 
 class DashboardLowerContent extends StatelessWidget {
@@ -246,6 +248,8 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
   }
 
   Future<void> _load() async {
+    final start = DateTime.now();
+    const minSkeletonDuration = Duration(milliseconds: 250);
     try {
       final dir = await RecordingsStorage.getUserRecordingsDir(_effectiveUid);
       final entities = dir.listSync();
@@ -291,12 +295,21 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
         await audioPlayer.dispose();
       }
 
+      final elapsed = DateTime.now().difference(start);
+      if (elapsed < minSkeletonDuration) {
+        await Future<void>.delayed(minSkeletonDuration - elapsed);
+      }
+
       if (!mounted) return;
       setState(() {
         _items = items;
         _isLoading = false;
       });
     } catch (_) {
+      final elapsed = DateTime.now().difference(start);
+      if (elapsed < minSkeletonDuration) {
+        await Future<void>.delayed(minSkeletonDuration - elapsed);
+      }
       if (!mounted) return;
       setState(() {
         _items = const [];
@@ -352,6 +365,10 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
           ? null
           : () {
               HapticFeedback.lightImpact();
+              if (AuraAuthProvider.of(context).isGuest) {
+                unawaited(showSummarizeGuestBlock(context));
+                return;
+              }
               unawaited(
                 SummarizationFlow.summarizeAndOpen(
                   context: context,
@@ -528,89 +545,116 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
 
+    Widget child;
     if (_isLoading) {
-      return Container(
-        decoration: BoxDecoration(
-          color: colors.surface,
-          borderRadius: AuraRadius.mdBr,
-          border: Border.all(color: colors.border),
-          boxShadow: AuraElevation.low(Colors.black),
+      child = const _RecentRecordingsSkeleton(key: ValueKey('skeleton'));
+    } else if (_items.isEmpty) {
+      child = KeyedSubtree(
+        key: const ValueKey('empty'),
+        child: Container(
+          decoration: BoxDecoration(
+            color: colors.surface,
+            borderRadius: AuraRadius.mdBr,
+            border: Border.all(color: colors.border),
+            boxShadow: AuraElevation.low(Colors.black),
+          ),
+          padding: const EdgeInsets.all(AuraSpacing.md),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: colors.surfaceElevated,
+                  border: Border.all(color: colors.border),
+                ),
+                child: Icon(Icons.mic_rounded, color: colors.iconDefault, size: 22),
+              ),
+              const SizedBox(width: AuraSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'No recordings yet',
+                      style: AuraTypography.bodyLarge(colors.textPrimary).copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: AuraSpacing.xxs),
+                    Text(
+                      'Start recording to see your latest files here.',
+                      style: AuraTypography.caption(colors.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-        padding: const EdgeInsets.all(AuraSpacing.md),
-        child: Row(
+      );
+    } else {
+      child = KeyedSubtree(
+        key: const ValueKey('content'),
+        child: Column(
           children: [
-            SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: colors.accent,
-              ),
-            ),
-            const SizedBox(width: AuraSpacing.md),
-            Expanded(
-              child: Text(
-                'Loading recent recordings…',
-                style: AuraTypography.bodyMedium(colors.textSecondary),
-              ),
-            ),
+            for (int i = 0; i < _items.length; i++) ...[
+              _buildRecentTile(colors, i),
+              if (i != _items.length - 1) const SizedBox(height: AuraSpacing.sm),
+            ],
           ],
         ),
       );
     }
 
-    if (_items.isEmpty) {
-      return Container(
-        decoration: BoxDecoration(
-          color: colors.surface,
-          borderRadius: AuraRadius.mdBr,
-          border: Border.all(color: colors.border),
-          boxShadow: AuraElevation.low(Colors.black),
-        ),
-        padding: const EdgeInsets.all(AuraSpacing.md),
-        child: Row(
-          children: [
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 200),
+      child: child,
+    );
+  }
+}
+
+class _RecentRecordingsSkeleton extends StatelessWidget {
+  const _RecentRecordingsSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AuraThemeColors.of(context);
+    return AuraSkeletonGroup(
+      child: Column(
+        children: [
+          for (int i = 0; i < 3; i++) ...[
             Container(
-              width: 44,
-              height: 44,
               decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: colors.surfaceElevated,
+                color: colors.surface,
+                borderRadius: AuraRadius.mdBr,
                 border: Border.all(color: colors.border),
               ),
-              child: Icon(Icons.mic_rounded, color: colors.iconDefault, size: 22),
-            ),
-            const SizedBox(width: AuraSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              padding: const EdgeInsets.all(AuraSpacing.md),
+              child: Row(
                 children: [
-                  Text(
-                    'No recordings yet',
-                    style: AuraTypography.bodyLarge(colors.textPrimary).copyWith(
-                      fontWeight: FontWeight.w600,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        AuraSkeletonBox(width: 170, height: 14),
+                        SizedBox(height: 8),
+                        AuraSkeletonBox(width: 100, height: 10),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: AuraSpacing.xxs),
-                  Text(
-                    'Start recording to see your latest files here.',
-                    style: AuraTypography.caption(colors.textSecondary),
-                  ),
+                  const SizedBox(width: AuraSpacing.md),
+                  const AuraSkeletonBox(width: 36, height: 10),
+                  const SizedBox(width: AuraSpacing.sm),
+                  const AuraSkeletonBox(width: 20, height: 20),
                 ],
               ),
             ),
+            if (i != 2) const SizedBox(height: AuraSpacing.sm),
           ],
-        ),
-      );
-    }
-
-    return Column(
-      children: [
-        for (int i = 0; i < _items.length; i++) ...[
-          _buildRecentTile(colors, i),
-          if (i != _items.length - 1) const SizedBox(height: AuraSpacing.sm),
         ],
-      ],
+      ),
     );
   }
 }
@@ -696,45 +740,53 @@ class _RecentExpandableTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: AuraRadius.mdBr,
-              onTap: onToggle,
-              onLongPress: onOpenFull,
-              child: Padding(
-                padding: const EdgeInsets.all(AuraSpacing.md),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            data.title,
-                            style: AuraTypography.bodyLarge(colors.textPrimary).copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                            overflow: TextOverflow.ellipsis,
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onToggle,
+            onLongPress: onOpenFull,
+            child: Padding(
+              padding: const EdgeInsets.all(AuraSpacing.md),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          data.title,
+                          style: AuraTypography.bodyLarge(colors.textPrimary).copyWith(
+                            fontWeight: FontWeight.w600,
                           ),
-                          const SizedBox(height: AuraSpacing.xxs),
-                          Text(
-                            data.subtitle,
-                            style: AuraTypography.caption(colors.textSecondary),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: AuraSpacing.xxs),
+                        Text(
+                          data.subtitle,
+                          style: AuraTypography.caption(colors.textSecondary),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: AuraSpacing.md),
-                    Text(
-                      data.durationText ?? '--:--',
-                      style: AuraTypography.caption(colors.textSecondary).copyWith(
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
+                  ),
+                  const SizedBox(width: AuraSpacing.md),
+                  Text(
+                    data.durationText ?? '--:--',
+                    style: AuraTypography.caption(colors.textSecondary).copyWith(
+                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: AuraSpacing.sm),
+                  AnimatedRotation(
+                    turns: isExpanded ? 0.5 : 0.0,
+                    duration: AuraMotion.fast,
+                    curve: AuraMotion.standard,
+                    child: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 20,
+                      color: colors.iconDefault,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -861,25 +913,24 @@ class _QuickActionsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      mainAxisSpacing: AuraSpacing.sm,
-      crossAxisSpacing: AuraSpacing.sm,
-      physics: const NeverScrollableScrollPhysics(),
-      childAspectRatio: 2.35,
+    return Row(
       children: [
-        _ActionCard(
-          icon: Icons.file_upload_outlined,
-          label: 'Upload Audio',
-          onTap: onUploadAudio,
-          dense: true,
+        Expanded(
+          child: _ActionCard(
+            icon: Icons.file_upload_outlined,
+            label: 'Upload Audio',
+            subtitle: 'Import from device',
+            onTap: onUploadAudio,
+          ),
         ),
-        _ActionCard(
-          icon: Icons.summarize_rounded,
-          label: 'Summarize',
-          onTap: onSummarize,
-          dense: true,
+        const SizedBox(width: AuraSpacing.sm),
+        Expanded(
+          child: _ActionCard(
+            icon: Icons.auto_awesome_rounded,
+            label: 'Summarize',
+            subtitle: 'AI-powered notes',
+            onTap: onSummarize,
+          ),
         ),
       ],
     );
@@ -890,14 +941,14 @@ class _ActionCard extends StatelessWidget {
   const _ActionCard({
     required this.icon,
     required this.label,
+    required this.subtitle,
     this.onTap,
-    this.dense = false,
   });
 
   final IconData icon;
   final String label;
+  final String subtitle;
   final VoidCallback? onTap;
-  final bool dense;
 
   @override
   Widget build(BuildContext context) {
@@ -922,27 +973,30 @@ class _ActionCard extends StatelessWidget {
                   onTap?.call();
                 },
           child: Padding(
-            padding: EdgeInsets.all(dense ? AuraSpacing.sm : AuraSpacing.md),
+            padding: const EdgeInsets.all(AuraSpacing.md),
             child: Row(
               children: [
-                Container(
-                  width: dense ? 34 : 38,
-                  height: dense ? 34 : 38,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: colors.surfaceElevated,
-                    border: Border.all(color: colors.border),
-                  ),
-                  child: Icon(icon, color: colors.iconDefault, size: dense ? 18 : 20),
-                ),
-                SizedBox(width: dense ? AuraSpacing.sm : AuraSpacing.md),
+                Icon(icon, color: colors.accent, size: 24),
+                const SizedBox(width: AuraSpacing.sm),
                 Expanded(
-                  child: Text(
-                    label,
-                    style: AuraTypography.bodyMedium(colors.textPrimary).copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        label,
+                        style: AuraTypography.bodyMedium(colors.textPrimary).copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: AuraTypography.caption(colors.textSecondary),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
                 ),
               ],

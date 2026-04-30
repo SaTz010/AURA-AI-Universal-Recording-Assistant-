@@ -227,38 +227,64 @@ class _SummarizedAudioDetailScreenState
           icon: Icon(Icons.arrow_back, color: colors.textPrimary),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: AuraTypography.titleMedium(colors.textPrimary),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            const SizedBox(height: 2),
-            Text(
-              category,
-              style: AuraTypography.bodySmall(colors.textSecondary),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+        title: Text(
+          'Summary Details',
+          style: AuraTypography.titleLarge(colors.textPrimary),
         ),
         centerTitle: false,
         actions: [
-          IconButton(
-            icon: Icon(Icons.share_rounded, color: colors.accent),
-            onPressed: _shareText,
-            tooltip: 'Share',
+          PopupMenuButton<String>(
+            icon: Icon(Icons.more_vert_rounded, color: colors.textPrimary),
+            color: colors.surface,
+            shape: RoundedRectangleBorder(borderRadius: AuraRadius.mdBr),
+            tooltip: 'More options',
+            onSelected: (value) {
+              switch (value) {
+                case 'share':
+                  _shareText();
+                  break;
+                case 'pdf':
+                  if (!_isPdfBusy) _exportPdf();
+                  break;
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem<String>(
+                value: 'share',
+                child: Row(
+                  children: [
+                    Icon(Icons.share_rounded, color: colors.accent, size: 20),
+                    const SizedBox(width: AuraSpacing.md),
+                    Text(
+                      'Share',
+                      style: AuraTypography.bodyMedium(colors.textPrimary),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: 'pdf',
+                enabled: !_isPdfBusy,
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.picture_as_pdf_rounded,
+                      color: _isPdfBusy ? colors.textTertiary : colors.accent,
+                      size: 20,
+                    ),
+                    const SizedBox(width: AuraSpacing.md),
+                    Text(
+                      'Export PDF',
+                      style: AuraTypography.bodyMedium(
+                        _isPdfBusy ? colors.textTertiary : colors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          IconButton(
-            icon: Icon(Icons.picture_as_pdf_rounded, color: colors.accent),
-            onPressed: _isPdfBusy ? null : _exportPdf,
-            tooltip: 'Export PDF',
-          ),
-          const SizedBox(width: AuraSpacing.sm),
+          const SizedBox(width: AuraSpacing.xs),
         ],
       ),
       body: SafeArea(
@@ -273,6 +299,36 @@ class _SummarizedAudioDetailScreenState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: colors.surface,
+                    borderRadius: AuraRadius.mdBr,
+                    border: Border.all(color: colors.border),
+                    boxShadow: AuraElevation.low(Colors.black),
+                  ),
+                  padding: const EdgeInsets.all(AuraSpacing.lg),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _DetailMetaRow(
+                        icon: Icons.headphones_rounded,
+                        label: 'Audio',
+                        value: title,
+                        colors: colors,
+                      ),
+                      const SizedBox(height: AuraSpacing.md),
+                      Container(height: 1, color: colors.border),
+                      const SizedBox(height: AuraSpacing.md),
+                      _DetailMetaRow(
+                        icon: Icons.label_outline_rounded,
+                        label: 'Category',
+                        value: category,
+                        colors: colors,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AuraSpacing.lg),
                 _DropdownSection(
                   title: 'Cleaned transcript',
                   icon: Icons.subject_rounded,
@@ -458,6 +514,45 @@ class _DropdownSection extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _DetailMetaRow extends StatelessWidget {
+  const _DetailMetaRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.colors,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final AuraThemeColors colors;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: colors.textTertiary, size: 14),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: AuraTypography.caption(colors.textTertiary)
+              .copyWith(letterSpacing: 0.4),
+        ),
+        const SizedBox(width: AuraSpacing.sm),
+        Expanded(
+          child: Text(
+            value,
+            style: AuraTypography.bodyMedium(colors.textPrimary)
+                .copyWith(fontWeight: FontWeight.w600),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }

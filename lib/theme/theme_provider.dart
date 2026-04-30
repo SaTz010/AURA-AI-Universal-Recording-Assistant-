@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // ════════════════════════════════════════════════════════════════════════
-//  Theme Provider — InheritedNotifier-based, zero dependencies
+//  Theme Provider — InheritedNotifier-based with persistence
 //
 //  Usage:
 //    AuraThemeProvider.of(context).toggleTheme();
@@ -9,6 +10,8 @@ import 'package:flutter/material.dart';
 // ════════════════════════════════════════════════════════════════════════
 
 class ThemeNotifier extends ChangeNotifier {
+  static const String _prefsKey = 'aura_theme_mode';
+
   ThemeMode _themeMode;
 
   ThemeNotifier([this._themeMode = ThemeMode.dark]);
@@ -17,15 +20,40 @@ class ThemeNotifier extends ChangeNotifier {
 
   bool get isDark => _themeMode == ThemeMode.dark;
 
-  void setThemeMode(ThemeMode mode) {
-    if (_themeMode != mode) {
-      _themeMode = mode;
-      notifyListeners();
+  Future<void> loadSavedTheme() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString(_prefsKey);
+      if (saved == null) return;
+      final mode = switch (saved) {
+        'dark' => ThemeMode.dark,
+        'light' => ThemeMode.light,
+        'system' => ThemeMode.system,
+        _ => null,
+      };
+      if (mode != null && mode != _themeMode) {
+        _themeMode = mode;
+        notifyListeners();
+      }
+    } catch (_) {
+      // Best effort — fall back to the in-memory default if prefs fail.
     }
   }
 
-  void toggleTheme() {
-    setThemeMode(isDark ? ThemeMode.light : ThemeMode.dark);
+  Future<void> setThemeMode(ThemeMode mode) async {
+    if (_themeMode == mode) return;
+    _themeMode = mode;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_prefsKey, mode.name);
+    } catch (_) {
+      // Best effort — UI already updated.
+    }
+  }
+
+  Future<void> toggleTheme() {
+    return setThemeMode(isDark ? ThemeMode.light : ThemeMode.dark);
   }
 }
 

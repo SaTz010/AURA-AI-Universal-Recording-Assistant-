@@ -18,11 +18,13 @@ class SettingsScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: colors.background,
       appBar: AppBar(
-        backgroundColor: colors.surface,
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        scrolledUnderElevation: 0,
         elevation: 0,
         leading: _BackButton(),
         title: Text('Settings', style: AuraTypography.titleLarge(colors.textPrimary)),
-        centerTitle: true,
+        centerTitle: false,
       ),
       body: ListView(
         padding: const EdgeInsets.symmetric(
@@ -82,17 +84,62 @@ class SettingsScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AuraSpacing.xxl),
-          _SectionHeader(title: 'About'),
+          _SectionHeader(title: 'Terms & Policies'),
           const SizedBox(height: AuraSpacing.sm),
           _SettingsCard(
             children: [
               _SettingsTile(
-                icon: Icons.info_outline_rounded,
-                title: 'Version',
-                trailing: Text(
-                  '1.0.0',
-                  style: AuraTypography.bodySmall(colors.textSecondary),
+                icon: Icons.privacy_tip_rounded,
+                title: 'Privacy Policy',
+                trailing: Icon(
+                  Icons.chevron_right_rounded,
+                  color: colors.textTertiary,
                 ),
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  Navigator.of(context).pushNamed('/privacy');
+                },
+              ),
+              Divider(height: 1, color: colors.border),
+              _SettingsTile(
+                icon: Icons.article_rounded,
+                title: 'Terms & Conditions',
+                trailing: Icon(
+                  Icons.chevron_right_rounded,
+                  color: colors.textTertiary,
+                ),
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  Navigator.of(context).pushNamed('/terms');
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: AuraSpacing.xxl),
+          _SectionHeader(title: 'Customer Support'),
+          const SizedBox(height: AuraSpacing.sm),
+          _SettingsCard(
+            children: [
+              _SettingsTile(
+                icon: Icons.support_agent_rounded,
+                title: '+977 9841234567',
+                trailing: Icon(
+                  Icons.copy_rounded,
+                  size: 18,
+                  color: colors.textTertiary,
+                ),
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  Clipboard.setData(
+                    const ClipboardData(text: '+977 9841234567'),
+                  );
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Phone number copied to clipboard'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                },
               ),
             ],
           ),
@@ -138,6 +185,14 @@ class SettingsScreen extends StatelessWidget {
               ],
             ),
           ],
+          const SizedBox(height: AuraSpacing.xxl),
+          Center(
+            child: Text(
+              'Version 1.0.0',
+              style: AuraTypography.caption(colors.textTertiary),
+            ),
+          ),
+          const SizedBox(height: AuraSpacing.lg),
         ],
       ),
     );

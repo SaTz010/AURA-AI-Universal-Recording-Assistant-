@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'screens/auth_screen.dart';
 import 'screens/app_entry.dart';
-import 'screens/history_screen.dart';
 import 'screens/legal_screen.dart';
-import 'screens/placeholder_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/main_tabs_screen.dart';
 import 'providers/auth_provider.dart';
@@ -14,6 +13,7 @@ import 'firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  FlutterForegroundTask.initCommunicationPort();
   await _ensureFirebaseInitialized();
   runApp(const MyApp());
 }
@@ -46,6 +46,7 @@ class _MyAppState extends State<MyApp> {
   void initState() {
     super.initState();
     _authNotifier.initialize();
+    _themeNotifier.loadSavedTheme();
   }
 
   @override
@@ -78,9 +79,6 @@ class _MyAppState extends State<MyApp> {
                 '/summary': (context) => const MainTabsScreen(initialIndex: 2),
                 '/recordings': (context) => const MainTabsScreen(initialIndex: 1),
                 '/settings': (context) => const SettingsScreen(),
-                '/history': (context) => const HistoryScreen(),
-                '/about': (context) => const AboutScreen(),
-                '/logout': (context) => const LogoutScreen(),
                 '/terms': (context) => const TermsConditionsScreen(),
                 '/privacy': (context) => const PrivacyPolicyScreen(),
               },

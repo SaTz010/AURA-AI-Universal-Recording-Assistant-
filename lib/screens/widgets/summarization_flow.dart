@@ -32,6 +32,16 @@ class SummarizationFlow {
     '7': Icons.auto_awesome_rounded,
   };
 
+  static const Map<String, String> defaultContextDescriptions = {
+    '1': 'Clinical notes, diagnoses, symptoms & treatment discussions',
+    '2': 'Decisions, action items, key topics & follow-ups',
+    '3': 'Q&A exchanges, candidate responses & evaluator notes',
+    '4': 'Key concepts, theories, examples & study takeaways',
+    '5': 'Reminders, ideas, thoughts & personal reflections',
+    '6': 'Statements, agreements, proceedings & formal records',
+    '7': 'General-purpose summary for any type of audio',
+  };
+
   static Future<SummarizedAudio?> summarizeAndOpen({
     required BuildContext context,
     required ApiService apiService,
@@ -40,6 +50,7 @@ class SummarizationFlow {
     required String audioFileName,
     Map<String, String> contextOptions = defaultContextOptions,
     Map<String, IconData> contextIcons = defaultContextIcons,
+    Map<String, String> contextDescriptions = defaultContextDescriptions,
   }) async {
     final colors = AuraThemeColors.of(context);
 
@@ -64,6 +75,7 @@ class SummarizationFlow {
         title: title,
         options: contextOptions,
         icons: contextIcons,
+        descriptions: contextDescriptions,
       );
       if (!context.mounted) return null;
       if (contextKey == null || !contextOptions.containsKey(contextKey)) return null;
@@ -123,6 +135,7 @@ class SummarizationFlow {
     try {
       final response = await apiService.uploadAudioAndProcess(
         audioPath: audioPath,
+        audioFileName: audioFileName,
         category: category,
         detail: detail,
       );
@@ -247,6 +260,7 @@ class SummarizationFlow {
     required String title,
     required Map<String, String> options,
     required Map<String, IconData> icons,
+    required Map<String, String> descriptions,
   }) async {
     HapticFeedback.lightImpact();
 
@@ -260,7 +274,7 @@ class SummarizationFlow {
         return SafeArea(
           top: false,
           child: DraggableScrollableSheet(
-            initialChildSize: 0.78,
+            initialChildSize: 0.85,
             minChildSize: 0.55,
             maxChildSize: 0.95,
             expand: false,
@@ -274,87 +288,137 @@ class SummarizationFlow {
                   ),
                   border: Border.all(color: sheetColors.border),
                 ),
-                padding: const EdgeInsets.fromLTRB(
-                  AuraSpacing.base,
-                  AuraSpacing.lg,
-                  AuraSpacing.base,
-                  AuraSpacing.lg,
-                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Summarize as…',
-                            style: AuraTypography.titleLarge(sheetColors.textPrimary),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AuraSpacing.base,
+                        AuraSpacing.lg,
+                        AuraSpacing.xs,
+                        AuraSpacing.sm,
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'What type of recording is this?',
+                                  style: AuraTypography.titleLarge(sheetColors.textPrimary),
+                                ),
+                                const SizedBox(height: AuraSpacing.xs),
+                                Text(
+                                  'Choosing the right context helps AURA generate a more accurate and tailored summary for your content.',
+                                  style: AuraTypography.bodySmall(sheetColors.textSecondary),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.of(ctx).pop(),
-                          icon: Icon(Icons.close_rounded, color: sheetColors.iconDefault),
-                          tooltip: 'Close',
-                        ),
-                      ],
+                          IconButton(
+                            onPressed: () => Navigator.of(ctx).pop(),
+                            icon: Icon(Icons.close_rounded, color: sheetColors.iconDefault),
+                            tooltip: 'Close',
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: AuraSpacing.sm),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: sheetColors.surfaceElevated,
-                        borderRadius: AuraRadius.smBr,
-                        border: Border.all(color: sheetColors.border),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AuraSpacing.md,
-                        vertical: AuraSpacing.sm,
-                      ),
-                      child: Text(
-                        title,
-                        style: AuraTypography.bodyMedium(sheetColors.textPrimary)
-                            .copyWith(fontWeight: FontWeight.w600),
-                        overflow: TextOverflow.ellipsis,
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: AuraSpacing.base),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: sheetColors.surfaceElevated,
+                          borderRadius: AuraRadius.smBr,
+                          border: Border.all(color: sheetColors.border),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AuraSpacing.md,
+                          vertical: AuraSpacing.sm,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.audio_file_rounded,
+                              size: 16,
+                              color: sheetColors.textSecondary,
+                            ),
+                            const SizedBox(width: AuraSpacing.xs),
+                            Expanded(
+                              child: Text(
+                                title,
+                                style: AuraTypography.bodyMedium(sheetColors.textPrimary)
+                                    .copyWith(fontWeight: FontWeight.w600),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     const SizedBox(height: AuraSpacing.md),
                     Expanded(
                       child: ListView.separated(
                         controller: scrollController,
+                        padding: const EdgeInsets.fromLTRB(
+                          AuraSpacing.base,
+                          AuraSpacing.xs,
+                          AuraSpacing.base,
+                          AuraSpacing.xl,
+                        ),
                         itemCount: options.length,
                         separatorBuilder: (context, index) =>
                             const SizedBox(height: AuraSpacing.sm),
                         itemBuilder: (context, index) {
                           final entry = options.entries.elementAt(index);
                           final icon = icons[entry.key] ?? Icons.auto_awesome_rounded;
+                          final description = descriptions[entry.key] ?? '';
                           return Material(
                             color: Colors.transparent,
+                            borderRadius: AuraRadius.mdBr,
                             child: InkWell(
                               borderRadius: AuraRadius.mdBr,
-                              onTap: () => Navigator.of(ctx).pop(entry.key),
+                              onTap: () {
+                                HapticFeedback.selectionClick();
+                                Navigator.of(ctx).pop(entry.key);
+                              },
                               child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: AuraSpacing.md,
-                                  vertical: AuraSpacing.md,
-                                ),
+                                padding: const EdgeInsets.all(AuraSpacing.md),
                                 decoration: BoxDecoration(
                                   color: sheetColors.surface,
                                   borderRadius: AuraRadius.mdBr,
                                   border: Border.all(color: sheetColors.border),
+                                  boxShadow: AuraElevation.low(Colors.black),
                                 ),
                                 child: Row(
                                   children: [
-                                    Icon(icon, color: sheetColors.accent),
+                                    Icon(icon, color: sheetColors.accent, size: 24),
                                     const SizedBox(width: AuraSpacing.md),
                                     Expanded(
-                                      child: Text(
-                                        entry.value,
-                                        style: AuraTypography.bodyMedium(sheetColors.textPrimary)
-                                            .copyWith(fontWeight: FontWeight.w600),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            entry.value,
+                                            style: AuraTypography.bodyMedium(sheetColors.textPrimary)
+                                                .copyWith(fontWeight: FontWeight.w600),
+                                          ),
+                                          if (description.isNotEmpty) ...[
+                                            const SizedBox(height: 2),
+                                            Text(
+                                              description,
+                                              style: AuraTypography.caption(sheetColors.textSecondary),
+                                            ),
+                                          ],
+                                        ],
                                       ),
                                     ),
+                                    const SizedBox(width: AuraSpacing.sm),
                                     Icon(
                                       Icons.chevron_right_rounded,
                                       color: sheetColors.iconDefault,
+                                      size: 20,
                                     ),
                                   ],
                                 ),

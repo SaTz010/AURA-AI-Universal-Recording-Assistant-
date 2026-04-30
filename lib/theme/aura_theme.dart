@@ -125,6 +125,7 @@ ThemeData buildAuraDarkTheme() {
       elevation: 0,
       scrolledUnderElevation: 0,
       centerTitle: true,
+      toolbarHeight: 80,
       titleTextStyle: TextStyle(
         fontFamily: 'Poppins',
         fontSize: 18,
@@ -234,6 +235,7 @@ ThemeData buildAuraLightTheme() {
       elevation: 0,
       scrolledUnderElevation: 1,
       centerTitle: true,
+      toolbarHeight: 80,
       titleTextStyle: TextStyle(
         fontFamily: 'Poppins',
         fontSize: 18,

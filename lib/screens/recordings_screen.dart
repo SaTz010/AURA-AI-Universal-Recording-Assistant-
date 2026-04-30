@@ -12,6 +12,8 @@ import '../services/recordings_storage.dart';
 import '../services/summaries_library_events.dart';
 import '../services/summaries_storage.dart';
 import 'summarized_audio_detail_screen.dart';
+import 'widgets/aura_skeleton.dart';
+import 'widgets/guest_block.dart';
 import 'widgets/summarization_flow.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
@@ -141,6 +143,10 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
   }
 
   Future<void> _startSummarizeFlowForEntry(_RecordingEntry entry) async {
+    if (AuraAuthProvider.of(context).isGuest) {
+      await showSummarizeGuestBlock(context);
+      return;
+    }
     final saved = await SummarizationFlow.summarizeAndOpen(
       context: context,
       apiService: _apiService,
@@ -205,6 +211,8 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
   }
 
   Future<void> _loadRecordings() async {
+    final start = DateTime.now();
+    const minSkeletonDuration = Duration(milliseconds: 250);
     try {
       final dir = await RecordingsStorage.getUserRecordingsDir(_effectiveUid);
       final entities = dir.listSync();
@@ -240,6 +248,11 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
         summariesMap[summary.filePath] = summary;
       }
 
+      final elapsed = DateTime.now().difference(start);
+      if (elapsed < minSkeletonDuration) {
+        await Future<void>.delayed(minSkeletonDuration - elapsed);
+      }
+
       if (!mounted) return;
       setState(() {
         _allRecordings = entries;
@@ -251,6 +264,10 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
       final newestFirst = [...entries]..sort((a, b) => b.modified.compareTo(a.modified));
       unawaited(_prefetchDurations(newestFirst.take(25)));
     } catch (_) {
+      final elapsed = DateTime.now().difference(start);
+      if (elapsed < minSkeletonDuration) {
+        await Future<void>.delayed(minSkeletonDuration - elapsed);
+      }
       if (!mounted) return;
       setState(() => _isLoading = false);
     }
@@ -660,11 +677,19 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
           ),
         ],
       ),
-      body: _isLoading
-          ? Center(child: CircularProgressIndicator(color: colors.accent))
-          : visible.isEmpty
-              ? (_allRecordings.isEmpty ? _buildEmptyState(colors) : _buildFilteredEmptyState(colors))
-              : _buildRecordingsList(colors, visible),
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 200),
+        child: _isLoading
+            ? const _RecordingsListSkeleton(key: ValueKey('skeleton'))
+            : KeyedSubtree(
+                key: const ValueKey('content'),
+                child: visible.isEmpty
+                    ? (_allRecordings.isEmpty
+                        ? _buildEmptyState(colors)
+                        : _buildFilteredEmptyState(colors))
+                    : _buildRecordingsList(colors, visible),
+              ),
+      ),
     );
   }
 
@@ -788,48 +813,56 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  borderRadius: AuraRadius.mdBr,
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    _toggleExpanded(file.path);
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AuraSpacing.lg,
-                      vertical: AuraSpacing.md,
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                title,
-                                style: AuraTypography.bodyLarge(colors.textPrimary).copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                                overflow: TextOverflow.ellipsis,
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  _toggleExpanded(file.path);
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AuraSpacing.lg,
+                    vertical: AuraSpacing.md,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              style: AuraTypography.bodyLarge(colors.textPrimary).copyWith(
+                                fontWeight: FontWeight.w600,
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                _formatRelativeDateTime(lastModified),
-                                style: AuraTypography.caption(colors.textSecondary),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                          ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _formatRelativeDateTime(lastModified),
+                              style: AuraTypography.caption(colors.textSecondary),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: AuraSpacing.md),
-                        Text(
-                          durationText,
-                          style: AuraTypography.caption(colors.textSecondary),
+                      ),
+                      const SizedBox(width: AuraSpacing.md),
+                      Text(
+                        durationText,
+                        style: AuraTypography.caption(colors.textSecondary),
+                      ),
+                      const SizedBox(width: AuraSpacing.sm),
+                      AnimatedRotation(
+                        turns: isExpanded ? 0.5 : 0.0,
+                        duration: AuraMotion.fast,
+                        curve: AuraMotion.standard,
+                        child: Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          size: 20,
+                          color: colors.iconDefault,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -1075,6 +1108,59 @@ class _InlinePlayer extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _RecordingsListSkeleton extends StatelessWidget {
+  const _RecordingsListSkeleton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AuraThemeColors.of(context);
+    return AuraSkeletonGroup(
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(
+          AuraSpacing.base,
+          AuraSpacing.lg,
+          AuraSpacing.base,
+          AuraSpacing.lg,
+        ),
+        itemCount: 6,
+        separatorBuilder: (context, index) =>
+            const SizedBox(height: AuraSpacing.sm),
+        itemBuilder: (context, index) {
+          return Container(
+            decoration: BoxDecoration(
+              color: colors.surface,
+              borderRadius: AuraRadius.mdBr,
+              border: Border.all(color: colors.border),
+            ),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AuraSpacing.lg,
+              vertical: AuraSpacing.md,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      AuraSkeletonBox(width: 180, height: 14),
+                      SizedBox(height: 8),
+                      AuraSkeletonBox(width: 110, height: 10),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: AuraSpacing.md),
+                const AuraSkeletonBox(width: 36, height: 10),
+                const SizedBox(width: AuraSpacing.sm),
+                const AuraSkeletonBox(width: 20, height: 20),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:just_audio/just_audio.dart';
 
 import '../../providers/auth_provider.dart';
@@ -9,9 +10,12 @@ import '../../services/recordings_library_events.dart';
 import '../../services/recordings_storage.dart';
 import '../../theme/aura_theme.dart';
 import '../../theme/aura_tokens.dart';
+import 'aura_skeleton.dart';
 
 class RecordingTotalsCards extends StatefulWidget {
-  const RecordingTotalsCards({super.key});
+  const RecordingTotalsCards({super.key, this.onTap});
+
+  final VoidCallback? onTap;
 
   @override
   State<RecordingTotalsCards> createState() => _RecordingTotalsCardsState();
@@ -103,6 +107,9 @@ class _RecordingTotalsCardsState extends State<RecordingTotalsCards> {
       setState(() => _isLoading = true);
     }
 
+    final start = DateTime.now();
+    const minSkeletonDuration = Duration(milliseconds: 250);
+
     try {
       final dir = await RecordingsStorage.getUserRecordingsDir(_effectiveUid);
       final entities = dir.listSync();
@@ -141,6 +148,13 @@ class _RecordingTotalsCardsState extends State<RecordingTotalsCards> {
         await audioPlayer.dispose();
       }
 
+      if (showLoading) {
+        final elapsed = DateTime.now().difference(start);
+        if (elapsed < minSkeletonDuration) {
+          await Future<void>.delayed(minSkeletonDuration - elapsed);
+        }
+      }
+
       if (!mounted) return;
       final revision = RecordingsLibraryEvents.revision.value;
       _cacheByUidKey[_uidKey()] = _RecordingTotalsSnapshot(
@@ -160,6 +174,13 @@ class _RecordingTotalsCardsState extends State<RecordingTotalsCards> {
         _isLoading = false;
       });
     } catch (_) {
+      if (showLoading) {
+        final elapsed = DateTime.now().difference(start);
+        if (elapsed < minSkeletonDuration) {
+          await Future<void>.delayed(minSkeletonDuration - elapsed);
+        }
+      }
+
       if (!mounted) return;
       _cacheByUidKey[_uidKey()] = _RecordingTotalsSnapshot(
         revision: RecordingsLibraryEvents.revision.value,
@@ -220,23 +241,19 @@ class _RecordingTotalsCardsState extends State<RecordingTotalsCards> {
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
 
-    final totalTimeText = _isLoading
-        ? '—'
-        : (_durationsResolved == 0 && _recordingsCount > 0)
-            ? '--'
-            : _formatTotal(_totalRecorded);
+    final totalTimeText = (_durationsResolved == 0 && _recordingsCount > 0)
+        ? '--'
+        : _formatTotal(_totalRecorded);
 
-    final countText = _isLoading ? '—' : _recordingsCount.toString();
+    final countText = _recordingsCount.toString();
 
-    final meta = _isLoading
-        ? 'Calculating…'
-        : _recordingsCount == 0
-            ? 'No recordings yet'
-            : (_latestTimestamp == null)
-                ? '$_recordingsCount recordings'
-                : 'Last recorded: ${_formatRelativeDateTime(_latestTimestamp!, DateTime.now())}';
+    final meta = _recordingsCount == 0
+        ? 'No recordings yet'
+        : (_latestTimestamp == null)
+            ? '$_recordingsCount recordings'
+            : 'Last recorded: ${_formatRelativeDateTime(_latestTimestamp!, DateTime.now())}';
 
-    return Column(
+    final body = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
@@ -246,6 +263,8 @@ class _RecordingTotalsCardsState extends State<RecordingTotalsCards> {
                 icon: Icons.timer_rounded,
                 label: 'Total time',
                 value: totalTimeText,
+                isLoading: _isLoading,
+                onTap: widget.onTap,
               ),
             ),
             const SizedBox(width: AuraSpacing.sm),
@@ -254,18 +273,30 @@ class _RecordingTotalsCardsState extends State<RecordingTotalsCards> {
                 icon: Icons.multitrack_audio_rounded,
                 label: 'Recordings',
                 value: countText,
+                isLoading: _isLoading,
+                onTap: widget.onTap,
               ),
             ),
           ],
         ),
         const SizedBox(height: AuraSpacing.xs),
-        Text(
-          meta,
-          style: AuraTypography.caption(colors.textTertiary),
-          overflow: TextOverflow.ellipsis,
-        ),
+        _isLoading
+            ? const Padding(
+                padding: EdgeInsets.symmetric(vertical: 3),
+                child: AuraSkeletonBox(width: 180, height: 10),
+              )
+            : Text(
+                meta,
+                style: AuraTypography.caption(colors.textTertiary),
+                overflow: TextOverflow.ellipsis,
+              ),
       ],
     );
+
+    if (_isLoading) {
+      return AuraSkeletonGroup(child: body);
+    }
+    return body;
   }
 }
 
@@ -292,36 +323,40 @@ class _MiniStatCard extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.value,
+    this.isLoading = false,
+    this.onTap,
   });
 
   final IconData icon;
   final String label;
   final String value;
+  final bool isLoading;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
 
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.surface,
+    return Material(
+      color: colors.surface,
+      borderRadius: AuraRadius.lgBr,
+      child: InkWell(
+        onTap: onTap == null
+            ? null
+            : () {
+                HapticFeedback.lightImpact();
+                onTap!();
+              },
         borderRadius: AuraRadius.lgBr,
-        border: Border.all(color: colors.border),
-        boxShadow: AuraElevation.low(Colors.black),
-      ),
-      padding: const EdgeInsets.all(AuraSpacing.md),
-      child: Row(
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: colors.surfaceElevated,
-              border: Border.all(color: colors.border),
-            ),
-            child: Icon(icon, size: 18, color: colors.accent),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: AuraRadius.lgBr,
+            border: Border.all(color: colors.border),
           ),
+          padding: const EdgeInsets.all(AuraSpacing.md),
+          child: Row(
+        children: [
+          Icon(icon, size: 22, color: colors.accent),
           const SizedBox(width: AuraSpacing.sm),
           Expanded(
             child: Column(
@@ -332,19 +367,27 @@ class _MiniStatCard extends StatelessWidget {
                   style: AuraTypography.caption(colors.textSecondary),
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  value,
-                  style: AuraTypography.titleMedium(colors.textPrimary).copyWith(
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                    fontWeight: FontWeight.w700,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
+                const SizedBox(height: 4),
+                isLoading
+                    ? const Padding(
+                        padding: EdgeInsets.only(top: 2, bottom: 2),
+                        child: AuraSkeletonBox(width: 56, height: 16),
+                      )
+                    : Text(
+                        value,
+                        style: AuraTypography.titleMedium(colors.textPrimary)
+                            .copyWith(
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                          fontWeight: FontWeight.w700,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
               ],
             ),
           ),
         ],
+      ),
+        ),
       ),
     );
   }

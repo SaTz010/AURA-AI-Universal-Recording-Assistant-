@@ -8,7 +8,9 @@ import 'widgets/total_recorded_stat.dart';
 import 'widgets/total_summaries_stat.dart';
 
 class ProfileScreen extends StatelessWidget {
-  const ProfileScreen({super.key});
+  const ProfileScreen({super.key, this.onSelectTab});
+
+  final ValueChanged<int>? onSelectTab;
 
   @override
   Widget build(BuildContext context) {
@@ -119,11 +121,15 @@ class ProfileScreen extends StatelessWidget {
             const SizedBox(height: AuraSpacing.xl),
             const _SectionHeader(title: 'Recordings'),
             const SizedBox(height: AuraSpacing.sm),
-            const RecordingTotalsCards(),
+            RecordingTotalsCards(
+              onTap: onSelectTab == null ? null : () => onSelectTab!(1),
+            ),
             const SizedBox(height: AuraSpacing.xl),
             const _SectionHeader(title: 'Summary'),
             const SizedBox(height: AuraSpacing.sm),
-            const SummaryTotalsCard(),
+            SummaryTotalsCard(
+              onTap: onSelectTab == null ? null : () => onSelectTab!(2),
+            ),
           ],
         ),
       ),
