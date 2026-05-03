@@ -71,6 +71,10 @@ class SettingsScreen extends StatelessWidget {
                   Icons.chevron_right_rounded,
                   color: colors.textTertiary,
                 ),
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  Navigator.of(context).pushNamed('/settings/notifications');
+                },
               ),
               Divider(height: 1, color: colors.border),
               _SettingsTile(
@@ -80,6 +84,10 @@ class SettingsScreen extends StatelessWidget {
                   Icons.chevron_right_rounded,
                   color: colors.textTertiary,
                 ),
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  Navigator.of(context).pushNamed('/settings/storage');
+                },
               ),
             ],
           ),

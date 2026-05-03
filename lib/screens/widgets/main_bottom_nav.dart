@@ -21,7 +21,6 @@ class MainBottomNav extends StatelessWidget {
     final colors = AuraThemeColors.of(context);
     final isDarkTheme = Theme.of(context).brightness == Brightness.dark;
     final navHeight = AuraSpacing.massive + AuraSpacing.base; // 80px
-    final bottomInset = MediaQuery.of(context).viewPadding.bottom;
     final textScale = MediaQuery.textScalerOf(context).scale(1.0);
     final hideLabels = textScale >= _hideLabelsTextScaleThreshold;
 
@@ -46,8 +45,19 @@ class MainBottomNav extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: radius,
-        child: Padding(
-          padding: EdgeInsets.only(bottom: bottomInset > 0 ? bottomInset : AuraSpacing.sm),
+        // SafeArea with maintainBottomViewPadding: true is the canonical fix
+        // for edge-to-edge mode (Android 15+ / target SDK 35+). It always uses
+        // the hardware inset rather than the (possibly keyboard-shrunk)
+        // padding.bottom. left:true / right:true respect curved-edge insets
+        // on Samsung models; minimum keeps a small floor when no inset is
+        // reported (rare phones / older Android versions).
+        child: SafeArea(
+          top: false,
+          bottom: true,
+          left: true,
+          right: true,
+          maintainBottomViewPadding: true,
+          minimum: const EdgeInsets.only(bottom: AuraSpacing.sm),
           child: SizedBox(
             height: navHeight,
             child: NavigationBarTheme(

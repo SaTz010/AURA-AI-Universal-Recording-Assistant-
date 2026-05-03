@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../providers/auth_provider.dart';
+import '../services/summaries_library_events.dart';
+import '../services/summaries_storage.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
 import 'widgets/total_recorded_stat.dart';
@@ -115,9 +119,7 @@ class ProfileScreen extends StatelessWidget {
               photoUrl: photoUrl,
             ),
             const SizedBox(height: AuraSpacing.xl),
-            const _SectionHeader(title: 'Current plan'),
-            const SizedBox(height: AuraSpacing.sm),
-            const _ComingSoonCard(),
+            _HighlightCard(joinedAt: user?.metadata.creationTime?.toLocal()),
             const SizedBox(height: AuraSpacing.xl),
             const _SectionHeader(title: 'Recordings'),
             const SizedBox(height: AuraSpacing.sm),
@@ -173,49 +175,61 @@ class _ProfileHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
 
-    final joinedText = joinedAt == null ? 'Joined: —' : 'Joined ${_formatJoined(joinedAt!)}';
+    final joinedText = joinedAt == null
+        ? 'Welcome to AURA'
+        : 'Member since ${_formatJoined(joinedAt!)}';
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        CircleAvatar(
-          radius: 34,
-          backgroundColor: colors.surfaceElevated,
-          backgroundImage: (photoUrl != null && photoUrl!.isNotEmpty) ? NetworkImage(photoUrl!) : null,
-          child: (photoUrl == null || photoUrl!.isEmpty)
-              ? Icon(
-                  Icons.person_rounded,
-                  size: 34,
-                  color: colors.iconDefault,
-                )
-              : null,
-        ),
-        const SizedBox(width: AuraSpacing.lg),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                name,
-                overflow: TextOverflow.ellipsis,
-                style: AuraTypography.titleLarge(colors.textPrimary),
-              ),
-              const SizedBox(height: AuraSpacing.xxs),
-              Text(
-                email,
-                overflow: TextOverflow.ellipsis,
-                style: AuraTypography.bodyMedium(colors.textSecondary),
-              ),
-              const SizedBox(height: AuraSpacing.xxs),
-              Text(
-                joinedText,
-                overflow: TextOverflow.ellipsis,
-                style: AuraTypography.caption(colors.textTertiary),
-              ),
-            ],
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: AuraRadius.lgBr,
+        border: Border.all(color: colors.border),
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AuraSpacing.xl,
+        vertical: AuraSpacing.xl,
+      ),
+      child: Column(
+        children: [
+          CircleAvatar(
+            radius: 32,
+            backgroundColor: colors.surfaceElevated,
+            backgroundImage:
+                (photoUrl != null && photoUrl!.isNotEmpty) ? NetworkImage(photoUrl!) : null,
+            child: (photoUrl == null || photoUrl!.isEmpty)
+                ? Icon(
+                    Icons.person_rounded,
+                    size: 34,
+                    color: colors.iconDefault,
+                  )
+                : null,
           ),
-        ),
-      ],
+          const SizedBox(height: AuraSpacing.md),
+          Text(
+            name,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: AuraTypography.titleLarge(colors.textPrimary).copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            email,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: AuraTypography.bodyMedium(colors.textSecondary),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            joinedText,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: AuraTypography.caption(colors.textTertiary),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -238,12 +252,97 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-class _ComingSoonCard extends StatelessWidget {
-  const _ComingSoonCard();
+class _HighlightCard extends StatefulWidget {
+  const _HighlightCard({required this.joinedAt});
+
+  final DateTime? joinedAt;
+
+  @override
+  State<_HighlightCard> createState() => _HighlightCardState();
+}
+
+class _HighlightCardState extends State<_HighlightCard> {
+  String? _effectiveUid;
+  bool _hasInit = false;
+  bool _isLoading = true;
+  int _thisMonthCount = 0;
+
+  late final VoidCallback _summariesListener;
+
+  @override
+  void initState() {
+    super.initState();
+    _summariesListener = () {
+      if (!mounted) return;
+      unawaited(_load());
+    };
+    SummariesLibraryEvents.revision.addListener(_summariesListener);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final auth = AuraAuthProvider.of(context);
+    if (!auth.initialized) return;
+    final nextUid = auth.isGuest ? null : auth.user?.uid;
+    if (_hasInit && nextUid == _effectiveUid) return;
+    _effectiveUid = nextUid;
+    _hasInit = true;
+    unawaited(_load());
+  }
+
+  @override
+  void dispose() {
+    SummariesLibraryEvents.revision.removeListener(_summariesListener);
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final items = await SummariesStorage.load(_effectiveUid);
+      final now = DateTime.now();
+      var count = 0;
+      for (final s in items) {
+        final dt = DateTime.fromMillisecondsSinceEpoch(s.createdAtMs);
+        if (dt.year == now.year && dt.month == now.month) count++;
+      }
+      if (!mounted) return;
+      setState(() {
+        _thisMonthCount = count;
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _thisMonthCount = 0;
+        _isLoading = false;
+      });
+    }
+  }
+
+  String _formatJoined(DateTime dt) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+  }
 
   @override
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
+
+    final headline = _isLoading
+        ? '…'
+        : _thisMonthCount == 0
+            ? 'No summaries this month yet'
+            : _thisMonthCount == 1
+                ? '1 summary this month'
+                : '$_thisMonthCount summaries this month';
+
+    final subline = widget.joinedAt == null
+        ? 'Welcome — record your first audio to get started'
+        : 'Member since ${_formatJoined(widget.joinedAt!)}';
 
     return Container(
       decoration: BoxDecoration(
@@ -254,12 +353,26 @@ class _ComingSoonCard extends StatelessWidget {
       padding: const EdgeInsets.all(AuraSpacing.lg),
       child: Row(
         children: [
-          Icon(Icons.auto_awesome_rounded, color: colors.accent),
+          Icon(Icons.auto_awesome_rounded, color: colors.accent, size: 22),
           const SizedBox(width: AuraSpacing.md),
           Expanded(
-            child: Text(
-              'Coming soon',
-              style: AuraTypography.bodyMedium(colors.textSecondary),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  headline,
+                  style: AuraTypography.bodyLarge(colors.textPrimary).copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subline,
+                  style: AuraTypography.caption(colors.textSecondary),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ),
         ],

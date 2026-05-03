@@ -604,7 +604,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'AI-powered summaries from any audio.',
+                              'Import or either select a recording to generate AI-powered summaries and transcriptions.',
                               style: AuraTypography.caption(colors.textSecondary),
                             ),
                           ],
@@ -645,22 +645,52 @@ class _SummaryScreenState extends State<SummaryScreen> {
                     ),
                   ],
                   const SizedBox(height: AuraSpacing.lg),
-                  _SummarizeOptionTile(
-                    icon: Icons.library_music_rounded,
-                    label: _isLoadingRecordings ? 'Loading…' : 'Choose recording',
-                    sublabel: 'Pick from your saved recordings',
-                    onTap: _isLoadingRecordings
-                        ? null
-                        : () => _startSummarizeFlow(colors),
-                  ),
-                  const SizedBox(height: AuraSpacing.sm),
-                  _SummarizeOptionTile(
-                    icon: Icons.file_upload_outlined,
-                    label: _isPickingUpload ? 'Picking…' : 'Import audio',
-                    sublabel: 'Upload a file from this device',
-                    onTap: _isPickingUpload
-                        ? null
-                        : () => _pickAndProcessUploadedAudio(colors),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _isPickingUpload
+                              ? null
+                              : () => _pickAndProcessUploadedAudio(colors),
+                          icon: const Icon(
+                            Icons.file_upload_outlined,
+                            size: 18,
+                          ),
+                          label: Text(
+                            _isPickingUpload ? 'Picking…' : 'Import audio',
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: colors.textPrimary,
+                            side: BorderSide(color: colors.border),
+                            padding: const EdgeInsets.symmetric(
+                              vertical: AuraSpacing.md,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: AuraRadius.mdBr,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AuraSpacing.sm),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: _isLoadingRecordings
+                              ? null
+                              : () => _startSummarizeFlow(colors),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: AuraSpacing.md,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: AuraRadius.mdBr,
+                            ),
+                          ),
+                          child: Text(
+                            _isLoadingRecordings ? 'Loading…' : 'My Library',
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -839,84 +869,4 @@ class _SummariesListSkeleton extends StatelessWidget {
   }
 }
 
-class _SummarizeOptionTile extends StatelessWidget {
-  const _SummarizeOptionTile({
-    required this.icon,
-    required this.label,
-    required this.sublabel,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final String sublabel;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AuraThemeColors.of(context);
-    final disabled = onTap == null;
-
-    return Material(
-      color: colors.surfaceElevated,
-      borderRadius: AuraRadius.mdBr,
-      child: InkWell(
-        onTap: disabled
-            ? null
-            : () {
-                HapticFeedback.lightImpact();
-                onTap!();
-              },
-        borderRadius: AuraRadius.mdBr,
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: AuraRadius.mdBr,
-            border: Border.all(color: colors.border),
-          ),
-          padding: const EdgeInsets.symmetric(
-            horizontal: AuraSpacing.md,
-            vertical: AuraSpacing.md,
-          ),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                color: disabled ? colors.textTertiary : colors.accent,
-                size: 22,
-              ),
-              const SizedBox(width: AuraSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      label,
-                      style: AuraTypography.bodyMedium(
-                        disabled ? colors.textTertiary : colors.textPrimary,
-                      ).copyWith(fontWeight: FontWeight.w600),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      sublabel,
-                      style: AuraTypography.caption(colors.textSecondary),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: AuraSpacing.sm),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: colors.textTertiary,
-                size: 20,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 

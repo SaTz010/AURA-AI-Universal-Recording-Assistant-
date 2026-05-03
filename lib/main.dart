@@ -3,9 +3,12 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'screens/auth_screen.dart';
 import 'screens/app_entry.dart';
 import 'screens/legal_screen.dart';
+import 'screens/notification_settings_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/storage_settings_screen.dart';
 import 'screens/main_tabs_screen.dart';
 import 'providers/auth_provider.dart';
+import 'services/notification_preferences.dart';
 import 'theme/aura_theme.dart';
 import 'theme/theme_provider.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -47,6 +50,7 @@ class _MyAppState extends State<MyApp> {
     super.initState();
     _authNotifier.initialize();
     _themeNotifier.loadSavedTheme();
+    NotificationPreferences.instance.load();
   }
 
   @override
@@ -79,6 +83,9 @@ class _MyAppState extends State<MyApp> {
                 '/summary': (context) => const MainTabsScreen(initialIndex: 2),
                 '/recordings': (context) => const MainTabsScreen(initialIndex: 1),
                 '/settings': (context) => const SettingsScreen(),
+                '/settings/notifications': (context) =>
+                    const NotificationSettingsScreen(),
+                '/settings/storage': (context) => const StorageSettingsScreen(),
                 '/terms': (context) => const TermsConditionsScreen(),
                 '/privacy': (context) => const PrivacyPolicyScreen(),
               },
