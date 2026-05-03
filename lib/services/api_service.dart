@@ -19,11 +19,12 @@ class ApiException implements Exception {
   final Exception? originalException;
 
   @override
-  String toString() => 'ApiException: $message${statusCode != null ? ' (Status: $statusCode)' : ''}';
+  String toString() =>
+      'ApiException: $message${statusCode != null ? ' (Status: $statusCode)' : ''}';
 }
 
 /// Service for communicating with the FastAPI backend for audio processing.
-/// 
+///
 /// Handles audio file uploads, transcription, translation, and summarization.
 class ApiService {
   /// Base URL of the FastAPI backend.
@@ -55,9 +56,7 @@ class ApiService {
         connectTimeout: _requestTimeout,
         receiveTimeout: _requestTimeout,
         sendTimeout: _requestTimeout,
-        headers: {
-          'Accept': 'application/json',
-        },
+        headers: {'Accept': 'application/json'},
       ),
     );
 
@@ -82,19 +81,46 @@ class ApiService {
     'Other',
   ];
 
+  static const Set<String> _supportedUploadExtensions = {
+    'mp3',
+    'mp4',
+    'mpeg',
+    'mpga',
+    'm4a',
+    'wav',
+    'webm',
+    'aac',
+    'flac',
+    'ogg',
+    'opus',
+  };
+
   /// Validates that the category matches exactly one of the valid categories.
   static bool isValidCategory(String category) {
     return validCategories.contains(category);
   }
 
-  /// Maps a filename's extension to a Whisper-friendly Content-Type. Dio's
-  /// auto-detection is unreliable for `.m4a` (it can produce `audio/x-m4a` or
-  /// `application/octet-stream`), so we set the type explicitly for the
-  /// multipart upload.
+  static String? _extensionForFilename(String filename) {
+    final trimmed = filename.trim();
+    final dot = trimmed.lastIndexOf('.');
+    if (dot <= 0 || dot == trimmed.length - 1) return null;
+    return trimmed.substring(dot + 1).toLowerCase();
+  }
+
+  static bool _hasSupportedUploadExtension(String filename) {
+    final ext = _extensionForFilename(filename);
+    return ext != null && _supportedUploadExtensions.contains(ext);
+  }
+
+  /// Maps a filename's extension to a backend-friendly Content-Type.
+  ///
+  /// `.m4a` is intentionally separate from `.mp4`. Some servers reject `.m4a`
+  /// when it is labelled as `audio/mp4`, even though the extension is valid.
   static MediaType? _mediaTypeForFilename(String filename) {
-    final ext = filename.toLowerCase().split('.').last;
+    final ext = _extensionForFilename(filename);
     switch (ext) {
       case 'm4a':
+        return MediaType('audio', 'x-m4a');
       case 'mp4':
         return MediaType('audio', 'mp4');
       case 'mp3':
@@ -118,22 +144,49 @@ class ApiService {
     }
   }
 
+  static String _contentTypeLabel(MediaType? contentType) {
+    return contentType?.toString() ?? 'omitted';
+  }
+
+  static String _filenameForUpload({
+    required String audioPath,
+    required String? audioFileName,
+  }) {
+    final pathBasename = audioPath.split(RegExp(r'[\\/]')).last;
+    final suppliedName = audioFileName?.trim();
+
+    if (suppliedName != null &&
+        suppliedName.isNotEmpty &&
+        _hasSupportedUploadExtension(suppliedName)) {
+      return suppliedName;
+    }
+
+    // Some pickers/providers return cache names like `.tmp` or `.bin`. FastAPI
+    // validates by multipart filename extension, so only upload names that the
+    // backend accepts.
+    if (_hasSupportedUploadExtension(pathBasename)) {
+      return pathBasename;
+    }
+
+    return 'upload.m4a';
+  }
+
   /// Processes an audio file with the FastAPI backend.
-  /// 
+  ///
   /// Parameters:
   ///   - [audioPath]: Full file system path to the audio file (typically .m4a)
   ///   - [category]: Recording context - must match one of [validCategories] exactly
   ///   - [detail]: Optional additional context about the recording
   ///   - [onProgress]: Optional callback for upload progress (0.0 to 1.0)
-  /// 
+  ///
   /// Returns an [AudioProcessResponse] containing the transcript, summary, etc.
-  /// 
+  ///
   /// Throws [ApiException] if:
   ///   - [audioPath] file does not exist
   ///   - [category] is not valid
   ///   - HTTP request fails
   ///   - Response cannot be parsed
-  /// 
+  ///
   /// Example:
   /// ```dart
   /// final response = await apiService.uploadAudioAndProcess(
@@ -154,15 +207,14 @@ class ApiService {
     // Validate audio file exists
     final audioFile = File(audioPath);
     if (!await audioFile.exists()) {
-      throw ApiException(
-        message: 'Audio file not found at path: $audioPath',
-      );
+      throw ApiException(message: 'Audio file not found at path: $audioPath');
     }
 
     // Validate category
     if (!isValidCategory(category)) {
       throw ApiException(
-        message: 'Invalid category: "$category". Must be one of: ${validCategories.join(", ")}',
+        message:
+            'Invalid category: "$category". Must be one of: ${validCategories.join(", ")}',
       );
     }
 
@@ -182,7 +234,8 @@ class ApiService {
         if (attempt == _maxRetries) {
           // Final attempt failed
           throw ApiException(
-            message: 'Audio processing failed after ${_maxRetries + 1} attempts',
+            message:
+                'Audio processing failed after ${_maxRetries + 1} attempts',
             originalException: e is Exception ? e : Exception(e.toString()),
           );
         }
@@ -191,9 +244,7 @@ class ApiService {
       }
     }
 
-    throw ApiException(
-      message: 'Unexpected error in upload retry loop',
-    );
+    throw ApiException(message: 'Unexpected error in upload retry loop');
   }
 
   /// Internal method that performs the actual multipart upload.
@@ -204,21 +255,30 @@ class ApiService {
     String? audioFileName,
     ProgressCallback? onProgress,
   }) async {
+    String? uploadFilename;
     try {
       // Whisper detects the audio format from the multipart filename. On Android,
       // FilePicker often copies picks into a cache dir with a name that drops the
       // original extension (e.g. `audio_picker_8237.tmp`), which causes Whisper to
       // reply "Invalid file format". Prefer the caller-supplied original name when
       // available; otherwise fall back to the path basename.
-      final pathBasename = audioPath.split(RegExp(r'[\\/]')).last;
-      final filename = (audioFileName != null && audioFileName.trim().isNotEmpty)
-          ? audioFileName.trim()
-          : pathBasename;
+      final audioFile = File(audioPath);
+      final filename = _filenameForUpload(
+        audioPath: audioPath,
+        audioFileName: audioFileName,
+      );
+      uploadFilename = filename;
 
-      // Explicit Content-Type for the multipart audio part. Dio's auto-detection
-      // can return `audio/x-m4a` or `application/octet-stream` for .m4a, both of
-      // which Whisper rejects. Mapping ourselves guarantees the right MIME type.
       final contentType = _mediaTypeForFilename(filename);
+      final extension = _extensionForFilename(filename) ?? 'none';
+      final fileSize = await audioFile.length();
+
+      developer.log(
+        'Uploading audio: path="$audioPath", originalFilename="${audioFileName ?? ''}", '
+        'uploadFilename="$filename", extension="$extension", '
+        'contentType="${_contentTypeLabel(contentType)}", sizeBytes=$fileSize',
+        name: 'ApiService',
+      );
 
       // Create multipart form data
       final formData = FormData.fromMap({
@@ -239,23 +299,26 @@ class ApiService {
       );
 
       // Check response status
-      if (response.statusCode == null || response.statusCode! < 200 || response.statusCode! >= 300) {
+      if (response.statusCode == null ||
+          response.statusCode! < 200 ||
+          response.statusCode! >= 300) {
         throw ApiException(
-          message: 'Server returned status ${response.statusCode}: ${response.statusMessage}',
+          message:
+              'Server returned status ${response.statusCode}: ${response.statusMessage}',
           statusCode: response.statusCode,
         );
       }
 
       // Parse response data
       if (response.data is! Map<String, dynamic>) {
-        throw ApiException(
-          message: 'Invalid response format from server',
-        );
+        throw ApiException(message: 'Invalid response format from server');
       }
 
-      return AudioProcessResponse.fromJson(response.data as Map<String, dynamic>);
+      return AudioProcessResponse.fromJson(
+        response.data as Map<String, dynamic>,
+      );
     } on DioException catch (e) {
-      throw _handleDioException(e);
+      throw _handleDioException(e, uploadFilename: uploadFilename);
     } on ApiException {
       rethrow;
     } catch (e) {
@@ -267,13 +330,14 @@ class ApiService {
   }
 
   /// Converts Dio exceptions into user-friendly [ApiException] objects.
-  ApiException _handleDioException(DioException e) {
+  ApiException _handleDioException(DioException e, {String? uploadFilename}) {
     switch (e.type) {
       case DioExceptionType.connectionTimeout:
       case DioExceptionType.receiveTimeout:
       case DioExceptionType.sendTimeout:
         return ApiException(
-          message: 'Request timeout. The server is taking too long to respond. Please check your connection and try again.',
+          message:
+              'Request timeout. The server is taking too long to respond. Please check your connection and try again.',
           originalException: e,
         );
 
@@ -284,10 +348,26 @@ class ApiService {
 
         // Try to extract error message from response
         if (responseData is Map<String, dynamic>) {
-          errorMessage = responseData['detail'] ?? 
-              responseData['message'] ?? 
-              responseData['error'] ?? 
+          errorMessage =
+              responseData['detail'] ??
+              responseData['message'] ??
+              responseData['error'] ??
               errorMessage;
+        }
+
+        developer.log(
+          'Backend rejected audio upload: filename="${uploadFilename ?? ''}", '
+          'status=$statusCode, message="$errorMessage"',
+          name: 'ApiService',
+        );
+
+        final rejectedM4a =
+            uploadFilename != null &&
+            _extensionForFilename(uploadFilename) == 'm4a' &&
+            _looksLikeUnsupportedFormat(errorMessage);
+        if (rejectedM4a) {
+          errorMessage =
+              'The server rejected this .m4a file. Backend detail: $errorMessage';
         }
 
         return ApiException(
@@ -328,6 +408,14 @@ class ApiService {
     }
   }
 
+  static bool _looksLikeUnsupportedFormat(String message) {
+    final lower = message.toLowerCase();
+    return lower.contains('unsupported') ||
+        lower.contains('not supported') ||
+        lower.contains('invalid file format') ||
+        lower.contains('file format');
+  }
+
   String _buildSocketExceptionMessage(SocketException error) {
     final msg = error.message.toLowerCase();
 
@@ -342,7 +430,8 @@ class ApiService {
           'Check the IP/domain and ensure phone/emulator is on the same network.';
     }
 
-    if (msg.contains('network is unreachable') || msg.contains('no route to host')) {
+    if (msg.contains('network is unreachable') ||
+        msg.contains('no route to host')) {
       return 'Backend unreachable at $_baseUrl. '
           'Ensure device and backend PC are on the same Wi-Fi and firewall allows port 8000.';
     }
