@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(flutter pub *)",
-      "Bash(flutter analyze *)"
+      "Bash(flutter analyze *)",
+      "Bash('/c/Program Files \\(x86\\)/Microsoft/Edge/Application/msedge.exe' --headless=new --disable-gpu --window-size=1920,12960 --virtual-time-budget=8000 --hide-scrollbars --screenshot=/c/Users/ADMIN/Downloads/all_slides.png file:///C:/Users/ADMIN/Downloads/AURA_Presentation_v2.html)"
     ]
   }
 }
