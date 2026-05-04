@@ -81,7 +81,8 @@ class _MyAppState extends State<MyApp> {
                 '/home': (context) => const MainTabsScreen(initialIndex: 0),
                 '/profile': (context) => const MainTabsScreen(initialIndex: 3),
                 '/summary': (context) => const MainTabsScreen(initialIndex: 2),
-                '/recordings': (context) => const MainTabsScreen(initialIndex: 1),
+                '/recordings': (context) =>
+                    const MainTabsScreen(initialIndex: 1),
                 '/settings': (context) => const SettingsScreen(),
                 '/settings/notifications': (context) =>
                     const NotificationSettingsScreen(),

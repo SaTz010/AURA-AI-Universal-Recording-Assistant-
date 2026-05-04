@@ -44,9 +44,7 @@ class DashboardLowerContent extends StatelessWidget {
           onActionTap: onViewAllRecent,
         ),
         const SizedBox(height: AuraSpacing.sm),
-        _RecentRecordingsPreview(
-          onFileTap: onRecentFileTap,
-        ),
+        _RecentRecordingsPreview(onFileTap: onRecentFileTap),
         const SizedBox(height: AuraSpacing.xl),
         const _SectionHeader(title: 'Quick Actions'),
         const SizedBox(height: AuraSpacing.sm),
@@ -69,9 +67,9 @@ class _SectionHeader extends StatelessWidget {
     final colors = AuraThemeColors.of(context);
     return Text(
       title,
-      style: AuraTypography.overline(colors.textSecondary).copyWith(
-        letterSpacing: 1.4,
-      ),
+      style: AuraTypography.overline(
+        colors.textSecondary,
+      ).copyWith(letterSpacing: 1.4),
     );
   }
 }
@@ -154,7 +152,8 @@ class _RecentRecordingsPreview extends StatefulWidget {
   final ValueChanged<String>? onFileTap;
 
   @override
-  State<_RecentRecordingsPreview> createState() => _RecentRecordingsPreviewState();
+  State<_RecentRecordingsPreview> createState() =>
+      _RecentRecordingsPreviewState();
 }
 
 class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
@@ -237,9 +236,7 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
       final list = await SummariesStorage.load(_effectiveUid);
       if (!mounted) return;
       setState(() {
-        _summariesByPath = {
-          for (final s in list) s.filePath: s,
-        };
+        _summariesByPath = {for (final s in list) s.filePath: s};
       });
     } catch (_) {
       if (!mounted) return;
@@ -261,10 +258,15 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
           })
           .toList();
       recordingFiles.sort(
-        (a, b) => File(b.path).lastModifiedSync().compareTo(File(a.path).lastModifiedSync()),
+        (a, b) => File(
+          b.path,
+        ).lastModifiedSync().compareTo(File(a.path).lastModifiedSync()),
       );
 
-      final previewFiles = recordingFiles.take(3).map((e) => File(e.path)).toList();
+      final previewFiles = recordingFiles
+          .take(3)
+          .map((e) => File(e.path))
+          .toList();
       final now = DateTime.now();
 
       final items = <_RecentRecordingPreviewData>[];
@@ -342,22 +344,20 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
               widget.onFileTap?.call(item.filePath);
             },
       onPlayPause: () => _playPause(item.filePath),
-      onSeekToSeconds: (seconds) => _audioPlayer.seek(Duration(seconds: seconds)),
-      onSkipBack: () => _seekRelative(
-        item.filePath,
-        const Duration(seconds: -15),
-      ),
-      onSkipForward: () => _seekRelative(
-        item.filePath,
-        const Duration(seconds: 15),
-      ),
+      onSeekToSeconds: (seconds) =>
+          _audioPlayer.seek(Duration(seconds: seconds)),
+      onSkipBack: () =>
+          _seekRelative(item.filePath, const Duration(seconds: -15)),
+      onSkipForward: () =>
+          _seekRelative(item.filePath, const Duration(seconds: 15)),
       onViewSummary: existingSummary == null
           ? null
           : () {
               HapticFeedback.lightImpact();
               Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => SummarizedAudioDetailScreen(summary: existingSummary),
+                  builder: (_) =>
+                      SummarizedAudioDetailScreen(summary: existingSummary),
                 ),
               );
             },
@@ -379,11 +379,7 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
                 ),
               );
             },
-      onDelete: () => _showDeleteDialog(
-        colors,
-        item.title,
-        item.filePath,
-      ),
+      onDelete: () => _showDeleteDialog(item.title, item.filePath),
     );
   }
 
@@ -403,10 +399,11 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
     final dayLabel = _isSameDay(dt, today)
         ? 'Today'
         : _isSameDay(dt, yesterday)
-            ? 'Yesterday'
-            : now.difference(dt).inDays < 7
-                ? const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][dt.weekday - 1]
-                : '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+        ? 'Yesterday'
+        : now.difference(dt).inDays < 7
+        ? const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][dt.weekday -
+              1]
+        : '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
 
     final hour12 = (dt.hour % 12) == 0 ? 12 : (dt.hour % 12);
     final minute = dt.minute.toString().padLeft(2, '0');
@@ -512,32 +509,37 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
     }
   }
 
-  void _showDeleteDialog(AuraThemeColors colors, String title, String filePath) {
+  void _showDeleteDialog(String title, String filePath) {
     showDialog<void>(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: const Text('Delete Recording?'),
-        content: Text('Are you sure you want to delete $title?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(dialogCtx);
-              _deleteRecent(filePath);
-            },
-            child: Text(
-              'Delete',
-              style: TextStyle(
-                color: colors.accent,
-                fontWeight: FontWeight.w600,
+      builder: (dialogCtx) {
+        final destructiveColor = AuraSemanticColors.subtleDestructive(
+          dialogCtx,
+        );
+        return AlertDialog(
+          title: const Text('Delete Recording?'),
+          content: Text('Are you sure you want to delete $title?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogCtx);
+                _deleteRecent(filePath);
+              },
+              child: Text(
+                'Delete',
+                style: TextStyle(
+                  color: destructiveColor,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ),
-        ],
-      ),
+          ],
+        );
+      },
     );
   }
 
@@ -569,7 +571,11 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
                   color: colors.surfaceElevated,
                   border: Border.all(color: colors.border),
                 ),
-                child: Icon(Icons.mic_rounded, color: colors.iconDefault, size: 22),
+                child: Icon(
+                  Icons.mic_rounded,
+                  color: colors.iconDefault,
+                  size: 22,
+                ),
               ),
               const SizedBox(width: AuraSpacing.md),
               Expanded(
@@ -578,9 +584,9 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
                   children: [
                     Text(
                       'No recordings yet',
-                      style: AuraTypography.bodyLarge(colors.textPrimary).copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: AuraTypography.bodyLarge(
+                        colors.textPrimary,
+                      ).copyWith(fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: AuraSpacing.xxs),
                     Text(
@@ -601,7 +607,8 @@ class _RecentRecordingsPreviewState extends State<_RecentRecordingsPreview> {
           children: [
             for (int i = 0; i < _items.length; i++) ...[
               _buildRecentTile(colors, i),
-              if (i != _items.length - 1) const SizedBox(height: AuraSpacing.sm),
+              if (i != _items.length - 1)
+                const SizedBox(height: AuraSpacing.sm),
             ],
           ],
         ),
@@ -716,17 +723,14 @@ class _RecentExpandableTile extends StatelessWidget {
     final remainingRaw = duration - position;
     final remaining = remainingRaw.isNegative ? Duration.zero : remainingRaw;
 
-    final skipTextStyle = AuraTypography.bodyMedium(colors.iconDefault).copyWith(
-      fontWeight: FontWeight.w800,
-      letterSpacing: 0.2,
-    );
+    final skipTextStyle = AuraTypography.bodyMedium(
+      colors.iconDefault,
+    ).copyWith(fontWeight: FontWeight.w800, letterSpacing: 0.2);
 
     Widget skipText(String label) {
       return SizedBox(
         width: 34,
-        child: Center(
-          child: Text(label, style: skipTextStyle),
-        ),
+        child: Center(child: Text(label, style: skipTextStyle)),
       );
     }
 
@@ -754,9 +758,9 @@ class _RecentExpandableTile extends StatelessWidget {
                       children: [
                         Text(
                           data.title,
-                          style: AuraTypography.bodyLarge(colors.textPrimary).copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: AuraTypography.bodyLarge(
+                            colors.textPrimary,
+                          ).copyWith(fontWeight: FontWeight.w600),
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: AuraSpacing.xxs),
@@ -771,9 +775,10 @@ class _RecentExpandableTile extends StatelessWidget {
                   const SizedBox(width: AuraSpacing.md),
                   Text(
                     data.durationText ?? '--:--',
-                    style: AuraTypography.caption(colors.textSecondary).copyWith(
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
+                    style: AuraTypography.caption(colors.textSecondary)
+                        .copyWith(
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
                   ),
                   const SizedBox(width: AuraSpacing.sm),
                   AnimatedRotation(
@@ -825,21 +830,33 @@ class _RecentExpandableTile extends StatelessWidget {
                           child: Slider(
                             value: valueSeconds,
                             max: maxSeconds.toDouble(),
-                            onChanged: canSeek ? (v) => onSeekToSeconds(v.toInt()) : null,
+                            onChanged: canSeek
+                                ? (v) => onSeekToSeconds(v.toInt())
+                                : null,
                           ),
                         ),
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: AuraSpacing.sm),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AuraSpacing.sm,
+                          ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                _formatDuration(canSeek ? position : Duration.zero),
-                                style: AuraTypography.caption(colors.textSecondary),
+                                _formatDuration(
+                                  canSeek ? position : Duration.zero,
+                                ),
+                                style: AuraTypography.caption(
+                                  colors.textSecondary,
+                                ),
                               ),
                               Text(
-                                canSeek ? '-${_formatDuration(remaining)}' : '--:--',
-                                style: AuraTypography.caption(colors.textSecondary),
+                                canSeek
+                                    ? '-${_formatDuration(remaining)}'
+                                    : '--:--',
+                                style: AuraTypography.caption(
+                                  colors.textSecondary,
+                                ),
                               ),
                             ],
                           ),
@@ -850,7 +867,12 @@ class _RecentExpandableTile extends StatelessWidget {
                           children: [
                             IconButton(
                               onPressed: onDelete,
-                              icon: Icon(Icons.delete_outline_rounded, color: colors.accent),
+                              icon: Icon(
+                                Icons.delete_outline_rounded,
+                                color: AuraSemanticColors.subtleDestructive(
+                                  context,
+                                ),
+                              ),
                               iconSize: 30,
                               tooltip: 'Delete',
                             ),
@@ -862,7 +884,9 @@ class _RecentExpandableTile extends StatelessWidget {
                             IconButton(
                               onPressed: onPlayPause,
                               icon: Icon(
-                                isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                isPlaying
+                                    ? Icons.pause_rounded
+                                    : Icons.play_arrow_rounded,
                                 color: colors.textPrimary,
                               ),
                               iconSize: 46,
@@ -887,7 +911,9 @@ class _RecentExpandableTile extends StatelessWidget {
                                 color: colors.accent,
                               ),
                               iconSize: 28,
-                              tooltip: onViewSummary != null ? 'View Summary' : 'Summarize',
+                              tooltip: onViewSummary != null
+                                  ? 'View Summary'
+                                  : 'Summarize',
                             ),
                           ],
                         ),
@@ -903,10 +929,7 @@ class _RecentExpandableTile extends StatelessWidget {
 }
 
 class _QuickActionsGrid extends StatelessWidget {
-  const _QuickActionsGrid({
-    this.onUploadAudio,
-    this.onSummarize,
-  });
+  const _QuickActionsGrid({this.onUploadAudio, this.onSummarize});
 
   final VoidCallback? onUploadAudio;
   final VoidCallback? onSummarize;
@@ -928,7 +951,7 @@ class _QuickActionsGrid extends StatelessWidget {
           child: _ActionCard(
             icon: Icons.auto_awesome_rounded,
             label: 'Summarize',
-            subtitle: 'AI-powered notes',
+            subtitle: 'Generate AI notes',
             onTap: onSummarize,
           ),
         ),
@@ -953,30 +976,47 @@ class _ActionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
+    final isEnabled = onTap != null;
 
     return Container(
       decoration: BoxDecoration(
         color: colors.surface,
         borderRadius: AuraRadius.mdBr,
         border: Border.all(color: colors.border),
-        boxShadow: AuraElevation.low(Colors.black),
       ),
       child: Material(
         color: Colors.transparent,
         borderRadius: AuraRadius.mdBr,
         child: InkWell(
           borderRadius: AuraRadius.mdBr,
-          onTap: onTap == null
-              ? null
-              : () {
+          splashColor: colors.accent.withValues(alpha: 0.08),
+          highlightColor: colors.accent.withValues(alpha: 0.05),
+          onTap: isEnabled
+              ? () {
                   HapticFeedback.lightImpact();
                   onTap?.call();
-                },
+                }
+              : null,
           child: Padding(
-            padding: const EdgeInsets.all(AuraSpacing.md),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AuraSpacing.md,
+              vertical: AuraSpacing.base,
+            ),
             child: Row(
               children: [
-                Icon(icon, color: colors.accent, size: 24),
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: colors.surfaceElevated,
+                    borderRadius: AuraRadius.smBr,
+                  ),
+                  child: Icon(
+                    icon,
+                    color: isEnabled ? colors.accent : colors.textTertiary,
+                    size: 21,
+                  ),
+                ),
                 const SizedBox(width: AuraSpacing.sm),
                 Expanded(
                   child: Column(
@@ -985,12 +1025,12 @@ class _ActionCard extends StatelessWidget {
                     children: [
                       Text(
                         label,
-                        style: AuraTypography.bodyMedium(colors.textPrimary).copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: AuraTypography.bodyMedium(
+                          isEnabled ? colors.textPrimary : colors.textTertiary,
+                        ).copyWith(fontWeight: FontWeight.w600),
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: AuraSpacing.xxs),
                       Text(
                         subtitle,
                         style: AuraTypography.caption(colors.textSecondary),
@@ -1007,4 +1047,3 @@ class _ActionCard extends StatelessWidget {
     );
   }
 }
-

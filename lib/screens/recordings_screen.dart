@@ -949,7 +949,6 @@ class _RecordingsScreenState extends State<RecordingsScreen>
                           context,
                           entry.fileName,
                           file.path,
-                          colors,
                         ),
                         onSummarize: () => _startSummarizeFlowForEntry(entry),
                         onViewSummary: _summariesMap.containsKey(file.path)
@@ -980,33 +979,37 @@ class _RecordingsScreenState extends State<RecordingsScreen>
     BuildContext context,
     String fileName,
     String filePath,
-    AuraThemeColors colors,
   ) {
     showDialog(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: const Text('Delete Recording?'),
-        content: Text('Are you sure you want to delete $fileName?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(dialogCtx);
-              _deleteRecording(filePath);
-            },
-            child: Text(
-              'Delete',
-              style: TextStyle(
-                color: colors.accent,
-                fontWeight: FontWeight.w600,
+      builder: (dialogCtx) {
+        final destructiveColor = AuraSemanticColors.subtleDestructive(
+          dialogCtx,
+        );
+        return AlertDialog(
+          title: const Text('Delete Recording?'),
+          content: Text('Are you sure you want to delete $fileName?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogCtx);
+                _deleteRecording(filePath);
+              },
+              child: Text(
+                'Delete',
+                style: TextStyle(
+                  color: destructiveColor,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-          ),
-        ],
-      ),
+          ],
+        );
+      },
     );
   }
 }
@@ -1048,6 +1051,7 @@ class _InlinePlayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final deleteColor = AuraSemanticColors.subtleDestructive(context);
     final canSeek = isActive && duration.inMilliseconds > 0;
     final maxSeconds = duration.inSeconds <= 0 ? 1 : duration.inSeconds;
     final valueSeconds = canSeek
@@ -1124,7 +1128,7 @@ class _InlinePlayer extends StatelessWidget {
             children: [
               IconButton(
                 onPressed: onDelete,
-                icon: Icon(Icons.delete_outline_rounded, color: colors.accent),
+                icon: Icon(Icons.delete_outline_rounded, color: deleteColor),
                 iconSize: 30,
                 tooltip: 'Delete',
               ),

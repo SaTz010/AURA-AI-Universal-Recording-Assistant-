@@ -84,7 +84,6 @@ class _SummaryScreenState extends State<SummaryScreen> {
   Future<void> _deleteSummaryAt(int index) async {
     if (index < 0 || index >= _summaries.length) return;
 
-    final colors = AuraThemeColors.of(context);
     final s = _summaries[index];
     final title = _displayTitle(s.fileName);
 
@@ -92,6 +91,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
       context: context,
       builder: (ctx) {
         final dialogColors = AuraThemeColors.of(ctx);
+        final destructiveColor = AuraSemanticColors.subtleDestructive(ctx);
         return AlertDialog(
           backgroundColor: dialogColors.surface,
           title: Text(
@@ -115,7 +115,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
               child: Text(
                 'Delete',
                 style: AuraTypography.bodyMedium(
-                  colors.accent,
+                  destructiveColor,
                 ).copyWith(fontWeight: FontWeight.w700),
               ),
             ),
@@ -828,7 +828,10 @@ class _SummaryScreenState extends State<SummaryScreen> {
                                               _deleteSummaryAt(index),
                                           icon: Icon(
                                             Icons.delete_outline_rounded,
-                                            color: colors.iconDefault,
+                                            color:
+                                                AuraSemanticColors.subtleDestructive(
+                                                  context,
+                                                ),
                                           ),
                                           tooltip: 'Delete summary',
                                         ),

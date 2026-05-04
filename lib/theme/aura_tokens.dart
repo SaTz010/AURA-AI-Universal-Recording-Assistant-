@@ -8,12 +8,12 @@ import 'package:flutter/material.dart';
 class AuraSpacing {
   AuraSpacing._();
   static const double xxs = 2;
-  static const double xs  = 4;
-  static const double sm  = 8;
-  static const double md  = 12;
+  static const double xs = 4;
+  static const double sm = 8;
+  static const double md = 12;
   static const double base = 16;
-  static const double lg  = 20;
-  static const double xl  = 24;
+  static const double lg = 20;
+  static const double xl = 24;
   static const double xxl = 32;
   static const double xxxl = 40;
   static const double huge = 48;
@@ -23,18 +23,18 @@ class AuraSpacing {
 /// Border radii
 class AuraRadius {
   AuraRadius._();
-  static const double xs   = 4;
-  static const double sm   = 8;
-  static const double md   = 12;
-  static const double lg   = 16;
-  static const double xl   = 20;
+  static const double xs = 4;
+  static const double sm = 8;
+  static const double md = 12;
+  static const double lg = 16;
+  static const double xl = 20;
   static const double full = 999;
 
-  static BorderRadius get xsBr   => BorderRadius.circular(xs);
-  static BorderRadius get smBr   => BorderRadius.circular(sm);
-  static BorderRadius get mdBr   => BorderRadius.circular(md);
-  static BorderRadius get lgBr   => BorderRadius.circular(lg);
-  static BorderRadius get xlBr   => BorderRadius.circular(xl);
+  static BorderRadius get xsBr => BorderRadius.circular(xs);
+  static BorderRadius get smBr => BorderRadius.circular(sm);
+  static BorderRadius get mdBr => BorderRadius.circular(md);
+  static BorderRadius get lgBr => BorderRadius.circular(lg);
+  static BorderRadius get xlBr => BorderRadius.circular(xl);
   static BorderRadius get fullBr => BorderRadius.circular(full);
 }
 
@@ -86,16 +86,25 @@ class AuraElevation {
 /// Animation durations & curves
 class AuraMotion {
   AuraMotion._();
-  static const Duration instant  = Duration(milliseconds: 100);
-  static const Duration fast     = Duration(milliseconds: 200);
-  static const Duration normal   = Duration(milliseconds: 300);
-  static const Duration slow     = Duration(milliseconds: 500);
+  static const Duration instant = Duration(milliseconds: 100);
+  static const Duration fast = Duration(milliseconds: 200);
+  static const Duration normal = Duration(milliseconds: 300);
+  static const Duration slow = Duration(milliseconds: 500);
   static const Duration pageTransition = Duration(milliseconds: 350);
 
-  static const Curve standard    = Curves.easeInOut;
-  static const Curve decelerate  = Curves.easeOut;
-  static const Curve accelerate  = Curves.easeIn;
-  static const Curve spring      = Curves.elasticOut;
+  static const Curve standard = Curves.easeInOut;
+  static const Curve decelerate = Curves.easeOut;
+  static const Curve accelerate = Curves.easeIn;
+  static const Curve spring = Curves.elasticOut;
+}
+
+class AuraSemanticColors {
+  AuraSemanticColors._();
+
+  static Color subtleDestructive(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return isDark ? const Color(0xFFE08A8A) : const Color(0xFFB85C5C);
+  }
 }
 
 /// Splash screen tokens (kept separate from the brand-locked palette).
@@ -113,70 +122,122 @@ class AuraTypography {
   static const String _fontFamily = 'Poppins';
 
   static TextStyle displayLarge(Color color) => TextStyle(
-    fontFamily: _fontFamily, fontSize: 28, fontWeight: FontWeight.w600,
-    letterSpacing: 4, color: color, height: 1.3,
+    fontFamily: _fontFamily,
+    fontSize: 28,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 4,
+    color: color,
+    height: 1.3,
   );
 
   static TextStyle headlineLarge(Color color) => TextStyle(
-    fontFamily: _fontFamily, fontSize: 24, fontWeight: FontWeight.w600,
-    letterSpacing: 6, color: color, height: 1.3,
+    fontFamily: _fontFamily,
+    fontSize: 24,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 6,
+    color: color,
+    height: 1.3,
   );
 
   static TextStyle headlineMedium(Color color) => TextStyle(
-    fontFamily: _fontFamily, fontSize: 20, fontWeight: FontWeight.w600,
-    letterSpacing: 0.5, color: color, height: 1.4,
+    fontFamily: _fontFamily,
+    fontSize: 20,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.5,
+    color: color,
+    height: 1.4,
   );
 
   static TextStyle titleLarge(Color color) => TextStyle(
-    fontFamily: _fontFamily, fontSize: 18, fontWeight: FontWeight.w600,
-    letterSpacing: 2, color: color, height: 1.4,
+    fontFamily: _fontFamily,
+    fontSize: 18,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 2,
+    color: color,
+    height: 1.4,
   );
 
   static TextStyle titleMedium(Color color) => TextStyle(
-    fontFamily: _fontFamily, fontSize: 16, fontWeight: FontWeight.w600,
-    letterSpacing: 0.3, color: color, height: 1.4,
+    fontFamily: _fontFamily,
+    fontSize: 16,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.3,
+    color: color,
+    height: 1.4,
   );
 
   static TextStyle titleSmall(Color color) => TextStyle(
-    fontFamily: _fontFamily, fontSize: 14, fontWeight: FontWeight.w600,
-    letterSpacing: 0.2, color: color, height: 1.4,
+    fontFamily: _fontFamily,
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.2,
+    color: color,
+    height: 1.4,
   );
 
   // Backwards-compat alias (guards against incorrect casing in older UI code).
   static TextStyle titlesmall(Color color) => titleSmall(color);
 
   static TextStyle bodyLarge(Color color) => TextStyle(
-    fontFamily: _fontFamily, fontSize: 14, fontWeight: FontWeight.w500,
-    letterSpacing: 0.3, color: color, height: 1.5,
+    fontFamily: _fontFamily,
+    fontSize: 14,
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0.3,
+    color: color,
+    height: 1.5,
   );
 
   static TextStyle bodyMedium(Color color) => TextStyle(
-    fontFamily: _fontFamily, fontSize: 14, fontWeight: FontWeight.w400,
-    letterSpacing: 0.5, color: color, height: 1.5,
+    fontFamily: _fontFamily,
+    fontSize: 14,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 0.5,
+    color: color,
+    height: 1.5,
   );
 
   static TextStyle bodySmall(Color color) => TextStyle(
-    fontFamily: _fontFamily, fontSize: 13, fontWeight: FontWeight.w400,
-    letterSpacing: 0.3, color: color, height: 1.5,
+    fontFamily: _fontFamily,
+    fontSize: 13,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 0.3,
+    color: color,
+    height: 1.5,
   );
 
   static TextStyle caption(Color color) => TextStyle(
-    fontFamily: _fontFamily, fontSize: 12, fontWeight: FontWeight.w400,
-    letterSpacing: 0.2, color: color, height: 1.5,
+    fontFamily: _fontFamily,
+    fontSize: 12,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 0.2,
+    color: color,
+    height: 1.5,
   );
 
   static TextStyle overline(Color color) => TextStyle(
-    fontFamily: _fontFamily, fontSize: 11, fontWeight: FontWeight.w400,
-    letterSpacing: 1.2, color: color, height: 1.5,
+    fontFamily: _fontFamily,
+    fontSize: 11,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 1.2,
+    color: color,
+    height: 1.5,
   );
 
   static TextStyle labelSmall(Color color) => TextStyle(
-    fontFamily: _fontFamily, fontSize: 11, fontWeight: FontWeight.w600,
-    letterSpacing: 0.2, color: color, height: 1.5,
+    fontFamily: _fontFamily,
+    fontSize: 11,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.2,
+    color: color,
+    height: 1.5,
   );
 
   static TextStyle button(Color color) => TextStyle(
-    fontFamily: _fontFamily, fontSize: 14, fontWeight: FontWeight.w600,
-    letterSpacing: 0.3, color: color, height: 1,
+    fontFamily: _fontFamily,
+    fontSize: 14,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.3,
+    color: color,
+    height: 1,
   );
 }

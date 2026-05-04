@@ -109,11 +109,11 @@ class _StorageSettingsScreenState extends State<StorageSettingsScreen> {
   }
 
   Future<void> _confirmClearRecordings() async {
-    final colors = AuraThemeColors.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) {
         final dialogColors = AuraThemeColors.of(ctx);
+        final destructiveColor = AuraSemanticColors.subtleDestructive(ctx);
         return AlertDialog(
           backgroundColor: dialogColors.surface,
           title: Text(
@@ -137,7 +137,7 @@ class _StorageSettingsScreenState extends State<StorageSettingsScreen> {
               child: Text(
                 'Delete',
                 style: AuraTypography.bodyMedium(
-                  colors.accent,
+                  destructiveColor,
                 ).copyWith(fontWeight: FontWeight.w700),
               ),
             ),
@@ -184,11 +184,11 @@ class _StorageSettingsScreenState extends State<StorageSettingsScreen> {
   }
 
   Future<void> _confirmClearSummaries() async {
-    final colors = AuraThemeColors.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) {
         final dialogColors = AuraThemeColors.of(ctx);
+        final destructiveColor = AuraSemanticColors.subtleDestructive(ctx);
         return AlertDialog(
           backgroundColor: dialogColors.surface,
           title: Text(
@@ -212,7 +212,7 @@ class _StorageSettingsScreenState extends State<StorageSettingsScreen> {
               child: Text(
                 'Delete',
                 style: AuraTypography.bodyMedium(
-                  colors.accent,
+                  destructiveColor,
                 ).copyWith(fontWeight: FontWeight.w700),
               ),
             ),
@@ -467,7 +467,7 @@ class _ActionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = AuraThemeColors.of(context);
-    final destructiveColor = Theme.of(context).colorScheme.error;
+    final destructiveColor = AuraSemanticColors.subtleDestructive(context);
     final disabled = onTap == null;
     final foreground = disabled
         ? colors.textTertiary

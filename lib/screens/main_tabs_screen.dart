@@ -42,11 +42,11 @@ class _MainTabsScreenState extends State<MainTabsScreen> {
   }
 
   Future<bool> _confirmExit() async {
-    final colors = AuraThemeColors.of(context);
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) {
         final dialogColors = AuraThemeColors.of(ctx);
+        final destructiveColor = AuraSemanticColors.subtleDestructive(ctx);
         return AlertDialog(
           backgroundColor: dialogColors.surface,
           title: Text(
@@ -69,9 +69,9 @@ class _MainTabsScreenState extends State<MainTabsScreen> {
               onPressed: () => Navigator.of(ctx).pop(true),
               child: Text(
                 'Exit',
-                style: AuraTypography.bodyMedium(colors.accent).copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: AuraTypography.bodyMedium(
+                  destructiveColor,
+                ).copyWith(fontWeight: FontWeight.w700),
               ),
             ),
           ],
@@ -107,10 +107,7 @@ class _MainTabsScreenState extends State<MainTabsScreen> {
       },
       child: Scaffold(
         backgroundColor: colors.background,
-        body: IndexedStack(
-          index: _index,
-          children: tabs,
-        ),
+        body: IndexedStack(index: _index, children: tabs),
         bottomNavigationBar: MainBottomNav(
           selectedIndex: _index,
           onTap: _setIndex,
