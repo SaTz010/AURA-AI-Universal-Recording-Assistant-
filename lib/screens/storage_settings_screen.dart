@@ -74,6 +74,10 @@ class _StorageSettingsScreenState extends State<StorageSettingsScreen> {
       for (final s in summaries) {
         summariesBytes += s.transcript.length;
         summariesBytes += s.summary.length;
+        summariesBytes += s.summaryPoints.fold<int>(
+          0,
+          (total, point) => total + point.length,
+        );
         summariesBytes += (s.translation ?? '').length;
         summariesBytes += s.description.length;
         summariesBytes +=

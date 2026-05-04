@@ -10,6 +10,7 @@ class PdfGenerator {
     required String fileName,
     required String category,
     required String summary,
+    List<String> summaryPoints = const [],
     required String transcript,
     required String? translation,
     required double cost,
@@ -17,6 +18,10 @@ class PdfGenerator {
     try {
       // Keep `cost` in the signature for backward compatibility, but we no
       // longer render costs in user-visible exports.
+      final cleanSummaryPoints = summaryPoints
+          .map((point) => point.trim())
+          .where((point) => point.isNotEmpty)
+          .toList(growable: false);
       final pdf = pw.Document();
 
       // Create PDF content
@@ -78,6 +83,28 @@ class PdfGenerator {
             pw.Paragraph(text: summary, textAlign: pw.TextAlign.justify),
             pw.SizedBox(height: 20),
 
+            // Summary points section
+            if (cleanSummaryPoints.isNotEmpty) ...[
+              pw.Text(
+                'Summary Points',
+                style: pw.TextStyle(
+                  fontSize: 16,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 8),
+              ...cleanSummaryPoints.map(
+                (point) => pw.Padding(
+                  padding: const pw.EdgeInsets.only(bottom: 4),
+                  child: pw.Text(
+                    '- $point',
+                    style: const pw.TextStyle(fontSize: 11),
+                  ),
+                ),
+              ),
+              pw.SizedBox(height: 20),
+            ],
+
             // Transcript section
             pw.Text(
               'Full Transcript',
@@ -113,6 +140,7 @@ class PdfGenerator {
     required String fileName,
     required String category,
     required String summary,
+    List<String> summaryPoints = const [],
     required String transcript,
     required String? translation,
     required double cost,
@@ -122,6 +150,7 @@ class PdfGenerator {
         fileName: fileName,
         category: category,
         summary: summary,
+        summaryPoints: summaryPoints,
         transcript: transcript,
         translation: translation,
         cost: cost,

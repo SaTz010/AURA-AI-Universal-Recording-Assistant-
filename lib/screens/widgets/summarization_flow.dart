@@ -163,6 +163,7 @@ class SummarizationFlow {
         createdAtMs: DateTime.now().millisecondsSinceEpoch,
         description: detail ?? '',
         summary: response.summary,
+        summaryPoints: response.summaryPoints,
         transcript: response.transcript,
         translation: response.translation,
         cost: response.cost,

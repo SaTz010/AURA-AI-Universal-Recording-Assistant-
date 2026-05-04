@@ -90,6 +90,12 @@ class _SummarizedAudioDetailScreenState
     buffer.writeln('-------');
     buffer.writeln(resolved.summary);
 
+    if (resolved.summaryPoints.isNotEmpty) {
+      buffer.writeln('\nSUMMARY POINTS');
+      buffer.writeln('--------------');
+      buffer.writeln(_formatSummaryPoints(resolved.summaryPoints));
+    }
+
     buffer.writeln('\nTRANSCRIPT');
     buffer.writeln('----------');
     buffer.writeln(resolved.transcript);
@@ -151,6 +157,7 @@ class _SummarizedAudioDetailScreenState
             ? 'Unknown'
             : widget.summary.category,
         summary: resolved.summary,
+        summaryPoints: resolved.summaryPoints,
         transcript: resolved.transcript,
         translation: widget.summary.translation,
         cost: widget.summary.cost,
@@ -333,6 +340,18 @@ class _SummarizedAudioDetailScreenState
                   initiallyExpanded: false,
                 ),
                 const SizedBox(height: AuraSpacing.base),
+                if (resolved.summaryPoints.isNotEmpty) ...[
+                  _DropdownSection(
+                    title: 'Summary points',
+                    icon: Icons.format_list_bulleted_rounded,
+                    text: _formatSummaryPoints(resolved.summaryPoints),
+                    onCopy: () => _copyToClipboard(
+                      _formatSummaryPoints(resolved.summaryPoints),
+                    ),
+                    initiallyExpanded: true,
+                  ),
+                  const SizedBox(height: AuraSpacing.base),
+                ],
                 _DropdownSection(
                   title: 'Summary',
                   icon: Icons.summarize_rounded,
@@ -348,9 +367,14 @@ class _SummarizedAudioDetailScreenState
     );
   }
 
-  ({String transcript, String summary}) _resolveDisplayedTexts() {
+  ({String transcript, String summary, List<String> summaryPoints})
+  _resolveDisplayedTexts() {
     final transcript = widget.summary.transcript.trim();
     final summary = widget.summary.summary.trim();
+    final summaryPoints = widget.summary.summaryPoints
+        .map((point) => point.trim())
+        .where((point) => point.isNotEmpty)
+        .toList(growable: false);
 
     // If the summary contains section headings from the backend, split it so
     // "Cleaned transcript" and "Summary" render separately.
@@ -370,13 +394,26 @@ class _SummarizedAudioDetailScreenState
           ? englishSummary
           : _cleanDisplayText(summary);
 
-      return (transcript: effectiveTranscript, summary: effectiveSummary);
+      return (
+        transcript: effectiveTranscript,
+        summary: effectiveSummary,
+        summaryPoints: summaryPoints,
+      );
     }
 
     return (
       transcript: _cleanDisplayText(transcript),
       summary: _cleanDisplayText(summary),
+      summaryPoints: summaryPoints,
     );
+  }
+
+  String _formatSummaryPoints(List<String> points) {
+    return points
+        .map((point) => point.trim())
+        .where((point) => point.isNotEmpty)
+        .map((point) => '- $point')
+        .join('\n');
   }
 
   bool _looksSectioned(String text) {

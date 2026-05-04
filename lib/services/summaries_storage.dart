@@ -10,6 +10,7 @@ class SummarizedAudio {
     required this.createdAtMs,
     required this.description,
     this.summary = '',
+    this.summaryPoints = const [],
     this.transcript = '',
     this.translation,
     this.cost = 0.0,
@@ -22,21 +23,21 @@ class SummarizedAudio {
   final int createdAtMs;
   final String description;
   final String summary;
+  final List<String> summaryPoints;
   final String transcript;
   final String? translation;
   final double cost;
   final String category;
   final String? pdfUri;
 
-  SummarizedAudio copyWith({
-    String? pdfUri,
-  }) {
+  SummarizedAudio copyWith({String? pdfUri}) {
     return SummarizedAudio(
       filePath: filePath,
       fileName: fileName,
       createdAtMs: createdAtMs,
       description: description,
       summary: summary,
+      summaryPoints: summaryPoints,
       transcript: transcript,
       translation: translation,
       cost: cost,
@@ -46,17 +47,18 @@ class SummarizedAudio {
   }
 
   Map<String, Object?> toJson() => {
-        'filePath': filePath,
-        'fileName': fileName,
-        'createdAtMs': createdAtMs,
-        'description': description,
-        'summary': summary,
-        'transcript': transcript,
-        'translation': translation,
-        'cost': cost,
-        'category': category,
-      'pdfUri': pdfUri,
-      };
+    'filePath': filePath,
+    'fileName': fileName,
+    'createdAtMs': createdAtMs,
+    'description': description,
+    'summary': summary,
+    'summaryPoints': summaryPoints,
+    'transcript': transcript,
+    'translation': translation,
+    'cost': cost,
+    'category': category,
+    'pdfUri': pdfUri,
+  };
 
   static SummarizedAudio? fromJson(Object? raw) {
     if (raw is! Map) return null;
@@ -73,6 +75,7 @@ class SummarizedAudio {
 
     // Optional response data fields for backward compatibility
     final summary = raw['summary'] as String? ?? '';
+    final summaryPoints = _readSummaryPoints(raw);
     final transcript = raw['transcript'] as String? ?? '';
     final translation = raw['translation'] as String?;
     final cost = _readCost(raw);
@@ -85,6 +88,7 @@ class SummarizedAudio {
       createdAtMs: createdAtMs,
       description: description,
       summary: summary,
+      summaryPoints: summaryPoints,
       transcript: transcript,
       translation: translation,
       cost: cost,
@@ -102,12 +106,32 @@ class SummarizedAudio {
       return double.tryParse(value) ?? 0.0;
     }
     if (value is Map) {
-      final numeric = value['usd'] ?? value['total'] ?? value['value'] ?? 
-                      value['amount'] ?? value['cost'] ?? value['total_cost'];
+      final numeric =
+          value['usd'] ??
+          value['total'] ??
+          value['value'] ??
+          value['amount'] ??
+          value['cost'] ??
+          value['total_cost'];
       if (numeric is num) return numeric.toDouble();
       if (numeric is String) return double.tryParse(numeric) ?? 0.0;
     }
     return 0.0;
+  }
+
+  static List<String> _readSummaryPoints(dynamic json) {
+    if (json is! Map) return const [];
+    final value = json['summaryPoints'] ?? json['summary_points'];
+    if (value is! List) return const [];
+
+    final items = <String>[];
+    for (final item in value) {
+      if (item is! String) continue;
+      final text = item.trim();
+      if (text.isEmpty) continue;
+      items.add(text);
+    }
+    return List.unmodifiable(items);
   }
 }
 
@@ -130,10 +154,7 @@ class SummariesStorage {
   static Future<File> _indexFile(String? uid) async {
     final docs = await getApplicationDocumentsDirectory();
     final dir = Directory(
-      _join(
-        _join(docs.path, _rootFolderName),
-        _folderNameForUid(uid),
-      ),
+      _join(_join(docs.path, _rootFolderName), _folderNameForUid(uid)),
     );
 
     if (!await dir.exists()) {
@@ -151,7 +172,10 @@ class SummariesStorage {
       final raw = jsonDecode(await file.readAsString());
       if (raw is! List) return const [];
 
-      return raw.map(SummarizedAudio.fromJson).whereType<SummarizedAudio>().toList();
+      return raw
+          .map(SummarizedAudio.fromJson)
+          .whereType<SummarizedAudio>()
+          .toList();
     } catch (_) {
       return const [];
     }

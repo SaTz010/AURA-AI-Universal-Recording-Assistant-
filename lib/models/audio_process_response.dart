@@ -3,6 +3,7 @@ class AudioProcessResponse {
   const AudioProcessResponse({
     required this.transcript,
     required this.summary,
+    this.summaryPoints = const [],
     this.translation,
     this.cost = 0.0,
   });
@@ -12,6 +13,9 @@ class AudioProcessResponse {
 
   /// The summarized version of the transcript.
   final String summary;
+
+  /// Key summary points returned by the backend.
+  final List<String> summaryPoints;
 
   /// Optional translated text (if translation was performed).
   final String? translation;
@@ -30,7 +34,7 @@ class AudioProcessResponse {
 
     // Prefer the plain text summary field when available.
     final rawSummaryText = _readSummaryText(json);
-    final rawSummaryPoints = _readSummaryPointsText(json);
+    final summaryPoints = _readSummaryPoints(json);
 
     // Some backends return a combined Markdown-ish "summary" blob that
     // contains sections like "### CLEANED TRANSCRIPT" and "### ENGLISH SUMMARY".
@@ -46,16 +50,15 @@ class AudioProcessResponse {
     final summary = _cleanDisplayText(
       rawSummaryText.trim().isNotEmpty
           ? rawSummaryText
-          : rawSummaryPoints.trim().isNotEmpty
-              ? rawSummaryPoints
-              : parsedSections.englishSummary.trim().isNotEmpty
-                  ? parsedSections.englishSummary
-                  : combinedSummaryBlob,
+          : parsedSections.englishSummary.trim().isNotEmpty
+          ? parsedSections.englishSummary
+          : combinedSummaryBlob,
     );
 
     return AudioProcessResponse(
       transcript: transcript,
       summary: summary,
+      summaryPoints: summaryPoints,
       translation: _readNullableTextDeep(json, const [
         'translation',
         'translated_text',
@@ -105,23 +108,33 @@ class AudioProcessResponse {
     ]);
   }
 
-  static String _readSummaryPointsText(Map<String, dynamic> json) {
+  static List<String> _readSummaryPoints(Map<String, dynamic> json) {
     final value = _readFirstValueDeep(json, const [
       'summary_points',
       'summaryPoints',
       'bullets',
     ]);
-    if (value is! List) return '';
 
     final items = <String>[];
-    for (final item in value) {
-      final t = _extractText(item).trim();
-      if (t.isEmpty) continue;
-      items.add(t);
+    if (value is List) {
+      for (final item in value) {
+        final t = _cleanSummaryPoint(_extractText(item));
+        if (t.isEmpty) continue;
+        items.add(t);
+      }
+    } else if (value is String) {
+      for (final line in value.split(RegExp(r'[\r\n]+'))) {
+        final t = _cleanSummaryPoint(line);
+        if (t.isEmpty) continue;
+        items.add(t);
+      }
     }
-    if (items.isEmpty) return '';
 
-    return items.map((e) => '• $e').join('\n');
+    return List.unmodifiable(items);
+  }
+
+  static String _cleanSummaryPoint(String text) {
+    return text.replaceFirst(RegExp(r'^\s*(?:[-*•]|\d+[.)])\s+'), '').trim();
   }
 
   static String _readSummaryBlob(Map<String, dynamic> json) {
@@ -164,18 +177,16 @@ class AudioProcessResponse {
 
     final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
     final pattern = '^\\s*(?:#{1,6}\\s*)?${RegExp.escape(heading)}\\s*\$';
-    final startRe = RegExp(
-      pattern,
-      multiLine: true,
-      caseSensitive: false,
-    );
+    final startRe = RegExp(pattern, multiLine: true, caseSensitive: false);
     final start = startRe.firstMatch(normalized);
     if (start == null) return '';
 
     final contentStart = start.end;
     final remainder = normalized.substring(contentStart);
-    final nextHeading = RegExp(r'^\s*#{1,6}\s+.+$', multiLine: true)
-        .firstMatch(remainder);
+    final nextHeading = RegExp(
+      r'^\s*#{1,6}\s+.+$',
+      multiLine: true,
+    ).firstMatch(remainder);
 
     final content = nextHeading == null
         ? remainder
@@ -351,6 +362,7 @@ class AudioProcessResponse {
   Map<String, dynamic> toJson() => {
     'transcript': transcript,
     'summary': summary,
+    'summaryPoints': summaryPoints,
     'translation': translation,
     'cost': cost,
   };
@@ -360,6 +372,7 @@ class AudioProcessResponse {
     return 'AudioProcessResponse('
         'transcript: ${transcript.substring(0, transcript.length > 50 ? 50 : transcript.length)}, '
         'summary: ${summary.substring(0, summary.length > 50 ? 50 : summary.length)}, '
+        'summaryPoints: ${summaryPoints.length}, '
         'translation: $translation, '
         'cost: $cost)';
   }
