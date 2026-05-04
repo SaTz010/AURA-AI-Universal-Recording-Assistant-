@@ -19,8 +19,7 @@ class ApiException implements Exception {
   final Exception? originalException;
 
   @override
-  String toString() =>
-      'ApiException: $message${statusCode != null ? ' (Status: $statusCode)' : ''}';
+  String toString() => message;
 }
 
 /// Service for communicating with the FastAPI backend for audio processing.
@@ -36,9 +35,6 @@ class ApiService {
   /// Endpoint for audio processing.
   static const String _processAudioEndpoint = '/process-audio';
 
-  /// Request timeout in seconds.
-  static const Duration _requestTimeout = Duration(seconds: 120);
-
   /// Maximum number of retry attempts for failed requests.
   static const int _maxRetries = 2;
 
@@ -51,13 +47,7 @@ class ApiService {
   /// Initializes the Dio HTTP client with proper configuration.
   void _initializeDio() {
     _dio = Dio(
-      BaseOptions(
-        baseUrl: _baseUrl,
-        connectTimeout: _requestTimeout,
-        receiveTimeout: _requestTimeout,
-        sendTimeout: _requestTimeout,
-        headers: {'Accept': 'application/json'},
-      ),
+      BaseOptions(baseUrl: _baseUrl, headers: {'Accept': 'application/json'}),
     );
 
     // Add logging interceptor for debugging
@@ -207,14 +197,15 @@ class ApiService {
     // Validate audio file exists
     final audioFile = File(audioPath);
     if (!await audioFile.exists()) {
-      throw ApiException(message: 'Audio file not found at path: $audioPath');
+      throw ApiException(
+        message: 'We could not find that audio file. Please choose it again.',
+      );
     }
 
     // Validate category
     if (!isValidCategory(category)) {
       throw ApiException(
-        message:
-            'Invalid category: "$category". Must be one of: ${validCategories.join(", ")}',
+        message: 'Please choose a valid recording type and try again.',
       );
     }
 
@@ -235,7 +226,7 @@ class ApiService {
           // Final attempt failed
           throw ApiException(
             message:
-                'Audio processing failed after ${_maxRetries + 1} attempts',
+                'We could not process this audio right now. Please try again.',
             originalException: e is Exception ? e : Exception(e.toString()),
           );
         }
@@ -244,7 +235,9 @@ class ApiService {
       }
     }
 
-    throw ApiException(message: 'Unexpected error in upload retry loop');
+    throw ApiException(
+      message: 'We could not process this audio right now. Please try again.',
+    );
   }
 
   /// Internal method that performs the actual multipart upload.
@@ -304,14 +297,16 @@ class ApiService {
           response.statusCode! >= 300) {
         throw ApiException(
           message:
-              'Server returned status ${response.statusCode}: ${response.statusMessage}',
+              'The server could not process this audio right now. Please try again.',
           statusCode: response.statusCode,
         );
       }
 
       // Parse response data
       if (response.data is! Map<String, dynamic>) {
-        throw ApiException(message: 'Invalid response format from server');
+        throw ApiException(
+          message: 'The server sent an unexpected reply. Please try again.',
+        );
       }
 
       return AudioProcessResponse.fromJson(
@@ -323,7 +318,7 @@ class ApiService {
       rethrow;
     } catch (e) {
       throw ApiException(
-        message: 'Unexpected error during audio processing: $e',
+        message: 'We could not process this audio right now. Please try again.',
         originalException: e is Exception ? e : Exception(e.toString()),
       );
     }
@@ -337,23 +332,23 @@ class ApiService {
       case DioExceptionType.sendTimeout:
         return ApiException(
           message:
-              'Request timeout. The server is taking too long to respond. Please check your connection and try again.',
+              'This is taking longer than expected. Please check your connection and try again.',
           originalException: e,
         );
 
       case DioExceptionType.badResponse:
         final statusCode = e.response?.statusCode;
         final responseData = e.response?.data;
-        String errorMessage = 'Server error (Status: $statusCode)';
+        Object? serverError;
 
         // Try to extract error message from response
         if (responseData is Map<String, dynamic>) {
-          errorMessage =
+          serverError =
               responseData['detail'] ??
               responseData['message'] ??
-              responseData['error'] ??
-              errorMessage;
+              responseData['error'];
         }
+        final errorMessage = serverError?.toString() ?? '';
 
         developer.log(
           'Backend rejected audio upload: filename="${uploadFilename ?? ''}", '
@@ -361,17 +356,12 @@ class ApiService {
           name: 'ApiService',
         );
 
-        final rejectedM4a =
-            uploadFilename != null &&
-            _extensionForFilename(uploadFilename) == 'm4a' &&
-            _looksLikeUnsupportedFormat(errorMessage);
-        if (rejectedM4a) {
-          errorMessage =
-              'The server rejected this .m4a file. Backend detail: $errorMessage';
-        }
-
         return ApiException(
-          message: errorMessage,
+          message: _friendlyHttpErrorMessage(
+            statusCode: statusCode,
+            serverMessage: errorMessage,
+            uploadFilename: uploadFilename,
+          ),
           statusCode: statusCode,
           originalException: e,
         );
@@ -384,19 +374,21 @@ class ApiService {
           );
         }
         return ApiException(
-          message: 'Network error: ${e.message}',
+          message:
+              'We could not reach AURA right now. Please check your internet and try again.',
           originalException: e,
         );
 
       case DioExceptionType.cancel:
         return ApiException(
-          message: 'Request cancelled.',
+          message: 'The request was cancelled.',
           originalException: e,
         );
 
       case DioExceptionType.badCertificate:
         return ApiException(
-          message: 'SSL certificate error. Cannot establish secure connection.',
+          message:
+              'A secure connection could not be made. Please try again later.',
           originalException: e,
         );
 
@@ -406,6 +398,46 @@ class ApiService {
           originalException: e,
         );
     }
+  }
+
+  String _friendlyHttpErrorMessage({
+    required int? statusCode,
+    required String serverMessage,
+    required String? uploadFilename,
+  }) {
+    final lower = serverMessage.toLowerCase();
+    final rejectedM4a =
+        uploadFilename != null &&
+        _extensionForFilename(uploadFilename) == 'm4a' &&
+        _looksLikeUnsupportedFormat(serverMessage);
+
+    if (rejectedM4a || _looksLikeUnsupportedFormat(serverMessage)) {
+      return 'This audio file could not be read. Please try a different file or record it again.';
+    }
+
+    if (lower.contains('too large') ||
+        lower.contains('payload') ||
+        lower.contains('content length')) {
+      return 'This audio file is too large to upload. Please try a shorter recording.';
+    }
+
+    switch (statusCode) {
+      case 400:
+        return 'We could not process that audio. Please try another file.';
+      case 401:
+      case 403:
+        return 'Your session needs to be refreshed. Please sign in again.';
+      case 413:
+        return 'This audio file is too large to upload. Please try a shorter recording.';
+      case 429:
+        return 'AURA is busy right now. Please wait a moment and try again.';
+    }
+
+    if (statusCode != null && statusCode >= 500) {
+      return 'The server had trouble processing this audio. Please try again in a little while.';
+    }
+
+    return 'Something went wrong while processing this audio. Please try again.';
   }
 
   static bool _looksLikeUnsupportedFormat(String message) {
@@ -420,36 +452,29 @@ class ApiService {
     final msg = error.message.toLowerCase();
 
     if (msg.contains('connection refused')) {
-      return 'Cannot connect to backend at $_baseUrl. '
-          'Server may be down or not listening on LAN. '
-          'Start FastAPI with --host 0.0.0.0 --port 8000.';
+      return 'We could not reach AURA right now. Please try again in a moment.';
     }
 
     if (msg.contains('failed host lookup')) {
-      return 'Cannot resolve backend host in $_baseUrl. '
-          'Check the IP/domain and ensure phone/emulator is on the same network.';
+      return 'We could not find the AURA server. Please check your internet and try again.';
     }
 
     if (msg.contains('network is unreachable') ||
         msg.contains('no route to host')) {
-      return 'Backend unreachable at $_baseUrl. '
-          'Ensure device and backend PC are on the same Wi-Fi and firewall allows port 8000.';
+      return 'You seem to be offline. Please reconnect and try again.';
     }
 
-    return 'Connection to backend failed at $_baseUrl. '
-        'Check Wi-Fi/LAN, backend server status, and Android cleartext permissions.';
+    return 'We could not reach AURA right now. Please check your internet and try again.';
   }
 
   String _buildConnectionErrorMessage(String? dioMessage) {
     final raw = (dioMessage ?? '').toLowerCase();
 
     if (raw.contains('connection refused')) {
-      return 'Cannot connect to backend at $_baseUrl (connection refused). '
-          'Make sure FastAPI is running and bound to 0.0.0.0:8000.';
+      return 'We could not reach AURA right now. Please try again in a moment.';
     }
 
-    return 'Connection error while reaching $_baseUrl. '
-        'Verify backend is running, device is on same network, and port 8000 is accessible.';
+    return 'We could not reach AURA right now. Please check your internet and try again.';
   }
 
   /// Disposes the Dio client when the service is no longer needed.

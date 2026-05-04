@@ -7,6 +7,7 @@ import 'package:printing/printing.dart';
 import '../services/pdf_saf_service.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
+import '../widgets/aura_snack_bar.dart';
 
 class PdfPreviewScreen extends StatefulWidget {
   const PdfPreviewScreen({
@@ -33,12 +34,10 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
 
     if (!Platform.isAndroid) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Download is only supported on Android.'),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: colors.surface,
-        ),
+      showAuraSnackBar(
+        context,
+        message: 'PDF download is only supported on Android.',
+        backgroundColor: colors.surface,
       );
       return;
     }
@@ -64,12 +63,10 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
       if (!mounted) return;
 
       if (!ok) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Failed to save PDF.'),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: colors.surface,
-          ),
+        showAuraSnackBar(
+          context,
+          message: 'We could not save the PDF. Please try again.',
+          backgroundColor: colors.surface,
         );
         setState(() => _isSaving = false);
         return;
@@ -78,12 +75,10 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
       Navigator.of(context).pop(uri);
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Failed to save PDF.'),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: colors.surface,
-        ),
+      showAuraSnackBar(
+        context,
+        message: 'We could not save the PDF. Please try again.',
+        backgroundColor: colors.surface,
       );
       setState(() => _isSaving = false);
     }

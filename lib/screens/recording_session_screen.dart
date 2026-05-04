@@ -10,6 +10,7 @@ import '../services/recordings_storage.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
 import '../providers/auth_provider.dart';
+import '../widgets/aura_snack_bar.dart';
 
 class RecordingSessionScreen extends StatefulWidget {
   const RecordingSessionScreen({super.key});
@@ -71,8 +72,9 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen> {
     final hasPerm = await _service.hasPermission();
     if (!hasPerm) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Microphone permission denied')),
+      showAuraSnackBar(
+        context,
+        message: 'Microphone permission is needed to record audio.',
       );
       Navigator.pop(context);
       return;
@@ -87,8 +89,9 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen> {
     final ok = await _service.start(_effectiveUid);
     if (!mounted) return;
     if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to start recording')),
+      showAuraSnackBar(
+        context,
+        message: 'We could not start recording. Please try again.',
       );
       Navigator.pop(context);
       return;
@@ -115,12 +118,15 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen> {
     if (_isStopping || !_service.isRecording) return;
     setState(() => _isStopping = true);
 
-    unawaited(Future<void>.delayed(const Duration(seconds: 6), () {
-      if (!mounted || !_isStopping) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Finalizing recording… please wait')),
-      );
-    }));
+    unawaited(
+      Future<void>.delayed(const Duration(seconds: 6), () {
+        if (!mounted || !_isStopping) return;
+        showAuraSnackBar(
+          context,
+          message: 'Finalizing recording... please wait.',
+        );
+      }),
+    );
 
     final path = await _service.stop();
     if (!mounted) return;
@@ -135,10 +141,9 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen> {
     final isReady = await _waitForRecordingFileReady(recordedFile);
     if (!mounted) return;
     if (!isReady) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Recording could not be saved. Please try again.'),
-        ),
+      showAuraSnackBar(
+        context,
+        message: 'Recording could not be saved. Please try again.',
       );
       setState(() => _isStopping = false);
       Navigator.pop(context);
@@ -152,8 +157,10 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen> {
     final chosenBaseName = _sanitizeRecordingName(
       userInput == null || userInput.trim().isEmpty ? defaultName : userInput,
     );
-    final renamedPath =
-        await _renameRecordingFile(recordedFile, chosenBaseName);
+    final renamedPath = await _renameRecordingFile(
+      recordedFile,
+      chosenBaseName,
+    );
     final finalName = renamedPath != null
         ? File(renamedPath).path.split(RegExp(r'[\\/]')).last
         : recordedFile.path.split(RegExp(r'[\\/]')).last;
@@ -214,8 +221,10 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen> {
         continue;
       }
       final fileName = entry.path.split('/').last;
-      final baseName =
-          fileName.replaceAll(RegExp(r'\.m4a$', caseSensitive: false), '');
+      final baseName = fileName.replaceAll(
+        RegExp(r'\.m4a$', caseSensitive: false),
+        '',
+      );
       final match = auraPattern.firstMatch(baseName);
       if (match != null) {
         final parsed = int.tryParse(match.group(1) ?? '0') ?? 0;
@@ -270,7 +279,9 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen> {
   }
 
   Future<String?> _renameRecordingFile(
-      File originalFile, String preferredBaseName) async {
+    File originalFile,
+    String preferredBaseName,
+  ) async {
     final safeBase = preferredBaseName.isEmpty ? 'AURA_1' : preferredBaseName;
     final dir = await RecordingsStorage.getUserRecordingsDir(_effectiveUid);
     var attempt = 0;
@@ -307,10 +318,9 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen> {
       canPop: !_service.isRecording || _isInitializing,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop && _service.isRecording) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Use Stop to save or Cancel to discard.'),
-            ),
+          showAuraSnackBar(
+            context,
+            message: 'Use Stop to save or Cancel to discard.',
           );
         }
       },
@@ -320,7 +330,9 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen> {
           backgroundColor: colors.background,
           elevation: 0,
           leading: IconButton(
-            onPressed: _service.isRecording ? null : () => Navigator.pop(context),
+            onPressed: _service.isRecording
+                ? null
+                : () => Navigator.pop(context),
             icon: Icon(Icons.arrow_back_rounded, color: colors.textPrimary),
           ),
           title: Text(
@@ -353,8 +365,9 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen> {
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFFFF4D4F)
-                                      .withValues(alpha: 0.35),
+                                  color: const Color(
+                                    0xFFFF4D4F,
+                                  ).withValues(alpha: 0.35),
                                   blurRadius: 10,
                                   spreadRadius: 2,
                                 ),
@@ -365,9 +378,9 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen> {
                           Text(
                             'Recording in progress',
                             textAlign: TextAlign.center,
-                            style:
-                                AuraTypography.bodyLarge(colors.textSecondary)
-                                    .copyWith(fontWeight: FontWeight.w600),
+                            style: AuraTypography.bodyLarge(
+                              colors.textSecondary,
+                            ).copyWith(fontWeight: FontWeight.w600),
                           ),
                         ],
                       ),
@@ -378,11 +391,15 @@ class _RecordingSessionScreenState extends State<RecordingSessionScreen> {
                           return Text(
                             _formatRecordingTime(elapsed),
                             textAlign: TextAlign.center,
-                            style: AuraTypography.displayLarge(colors.textPrimary)
-                                .copyWith(
-                              letterSpacing: 2,
-                              fontFeatures: const [FontFeature.tabularFigures()],
-                            ),
+                            style:
+                                AuraTypography.displayLarge(
+                                  colors.textPrimary,
+                                ).copyWith(
+                                  letterSpacing: 2,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
                           );
                         },
                       ),
@@ -496,11 +513,8 @@ class _LiveWaveformPainter extends CustomPainter {
       ..style = PaintingStyle.stroke;
 
     final centerY = size.height / 2;
-    final maxBars =
-        ((size.width + _spacing) / (_barWidth + _spacing)).floor();
-    final start = amplitudes.length > maxBars
-        ? amplitudes.length - maxBars
-        : 0;
+    final maxBars = ((size.width + _spacing) / (_barWidth + _spacing)).floor();
+    final start = amplitudes.length > maxBars ? amplitudes.length - maxBars : 0;
     final visible = amplitudes.sublist(start);
 
     final totalWidth =

@@ -11,6 +11,7 @@ import '../services/summaries_library_events.dart';
 import '../services/summaries_storage.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
+import '../widgets/aura_snack_bar.dart';
 
 class StorageSettingsScreen extends StatefulWidget {
   const StorageSettingsScreen({super.key});
@@ -75,7 +76,8 @@ class _StorageSettingsScreenState extends State<StorageSettingsScreen> {
         summariesBytes += s.summary.length;
         summariesBytes += (s.translation ?? '').length;
         summariesBytes += s.description.length;
-        summariesBytes += s.fileName.length + s.filePath.length + s.category.length;
+        summariesBytes +=
+            s.fileName.length + s.filePath.length + s.category.length;
       }
     } catch (_) {}
 
@@ -130,9 +132,9 @@ class _StorageSettingsScreenState extends State<StorageSettingsScreen> {
               onPressed: () => Navigator.of(ctx).pop(true),
               child: Text(
                 'Delete',
-                style: AuraTypography.bodyMedium(colors.accent).copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: AuraTypography.bodyMedium(
+                  colors.accent,
+                ).copyWith(fontWeight: FontWeight.w700),
               ),
             ),
           ],
@@ -170,8 +172,10 @@ class _StorageSettingsScreenState extends State<StorageSettingsScreen> {
     await _load();
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Recordings cleared')),
+    showAuraSnackBar(
+      context,
+      message: 'Recordings cleared',
+      duration: auraBriefSnackBarDuration,
     );
   }
 
@@ -203,9 +207,9 @@ class _StorageSettingsScreenState extends State<StorageSettingsScreen> {
               onPressed: () => Navigator.of(ctx).pop(true),
               child: Text(
                 'Delete',
-                style: AuraTypography.bodyMedium(colors.accent).copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: AuraTypography.bodyMedium(
+                  colors.accent,
+                ).copyWith(fontWeight: FontWeight.w700),
               ),
             ),
           ],
@@ -227,8 +231,10 @@ class _StorageSettingsScreenState extends State<StorageSettingsScreen> {
     await _load();
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Summaries cleared')),
+    showAuraSnackBar(
+      context,
+      message: 'Summaries cleared',
+      duration: auraBriefSnackBarDuration,
     );
   }
 
@@ -275,16 +281,16 @@ class _StorageSettingsScreenState extends State<StorageSettingsScreen> {
               children: [
                 Text(
                   'Total used by AURA',
-                  style: AuraTypography.caption(colors.textSecondary).copyWith(
-                    letterSpacing: 0.4,
-                  ),
+                  style: AuraTypography.caption(
+                    colors.textSecondary,
+                  ).copyWith(letterSpacing: 0.4),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   _isLoading ? '—' : _formatBytes(totalBytes),
-                  style: AuraTypography.headlineLarge(colors.textPrimary).copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: AuraTypography.headlineLarge(
+                    colors.textPrimary,
+                  ).copyWith(fontWeight: FontWeight.w800),
                 ),
               ],
             ),
@@ -369,10 +375,9 @@ class _SectionHeader extends StatelessWidget {
       padding: const EdgeInsets.only(left: AuraSpacing.xs),
       child: Text(
         title.toUpperCase(),
-        style: AuraTypography.overline(colors.textTertiary).copyWith(
-          fontWeight: FontWeight.w600,
-          letterSpacing: 1.5,
-        ),
+        style: AuraTypography.overline(
+          colors.textTertiary,
+        ).copyWith(fontWeight: FontWeight.w600, letterSpacing: 1.5),
       ),
     );
   }
@@ -463,8 +468,8 @@ class _ActionRow extends StatelessWidget {
     final foreground = disabled
         ? colors.textTertiary
         : isDestructive
-            ? destructiveColor
-            : colors.textPrimary;
+        ? destructiveColor
+        : colors.textPrimary;
 
     return Material(
       color: Colors.transparent,
@@ -480,10 +485,7 @@ class _ActionRow extends StatelessWidget {
               Icon(icon, size: 20, color: foreground),
               const SizedBox(width: AuraSpacing.md),
               Expanded(
-                child: Text(
-                  label,
-                  style: AuraTypography.bodyLarge(foreground),
-                ),
+                child: Text(label, style: AuraTypography.bodyLarge(foreground)),
               ),
             ],
           ),

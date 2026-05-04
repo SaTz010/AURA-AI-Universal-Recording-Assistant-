@@ -11,6 +11,7 @@ import '../services/summaries_library_events.dart';
 import '../services/summaries_storage.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
+import '../widgets/aura_snack_bar.dart';
 
 class SummarizedAudioDetailScreen extends StatefulWidget {
   const SummarizedAudioDetailScreen({super.key, required this.summary});
@@ -62,12 +63,10 @@ class _SummarizedAudioDetailScreenState
     Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Copied to clipboard'),
-        duration: const Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ),
+    showAuraSnackBar(
+      context,
+      message: 'Copied to clipboard',
+      duration: auraBriefSnackBarDuration,
     );
   }
 
@@ -136,20 +135,21 @@ class _SummarizedAudioDetailScreenState
         _pdfUri = null;
       }
 
+      if (!mounted) return;
+
       final resolved = _resolveDisplayedTexts();
 
-      messenger.showSnackBar(
-        SnackBar(
-          content: const Text('Preparing PDF…'),
-          duration: const Duration(seconds: 1),
-          behavior: SnackBarBehavior.floating,
-        ),
+      showAuraSnackBarWithMessenger(
+        messenger,
+        message: 'Preparing PDF...',
+        duration: const Duration(seconds: 1),
       );
 
       final bytes = await PdfGenerator.generateSummaryPdfBytes(
         fileName: widget.summary.fileName,
-        category:
-            widget.summary.category.isEmpty ? 'Unknown' : widget.summary.category,
+        category: widget.summary.category.isEmpty
+            ? 'Unknown'
+            : widget.summary.category,
         summary: resolved.summary,
         transcript: resolved.transcript,
         translation: widget.summary.translation,
@@ -159,13 +159,11 @@ class _SummarizedAudioDetailScreenState
       if (!mounted) return;
 
       if (bytes == null) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: const Text('Failed to generate PDF'),
-            backgroundColor: colors.accent.withValues(alpha: 204),
-            duration: const Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-          ),
+        showAuraSnackBarWithMessenger(
+          messenger,
+          message: 'We could not create the PDF. Please try again.',
+          duration: auraBriefSnackBarDuration,
+          backgroundColor: colors.accent.withValues(alpha: 204),
         );
         return;
       }
@@ -194,12 +192,10 @@ class _SummarizedAudioDetailScreenState
 
       setState(() => _pdfUri = savedUri);
 
-      messenger.showSnackBar(
-        SnackBar(
-          content: const Text('PDF downloaded'),
-          duration: const Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-        ),
+      showAuraSnackBarWithMessenger(
+        messenger,
+        message: 'PDF downloaded',
+        duration: auraBriefSnackBarDuration,
       );
     } finally {
       if (mounted) {
@@ -374,10 +370,7 @@ class _SummarizedAudioDetailScreenState
           ? englishSummary
           : _cleanDisplayText(summary);
 
-      return (
-        transcript: effectiveTranscript,
-        summary: effectiveSummary,
-      );
+      return (transcript: effectiveTranscript, summary: effectiveSummary);
     }
 
     return (
@@ -409,17 +402,15 @@ class _SummarizedAudioDetailScreenState
 
     final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
     final pattern = '^\\s*(?:#{1,6}\\s*)?${RegExp.escape(heading)}\\s*\$';
-    final startRe = RegExp(
-      pattern,
-      multiLine: true,
-      caseSensitive: false,
-    );
+    final startRe = RegExp(pattern, multiLine: true, caseSensitive: false);
     final start = startRe.firstMatch(normalized);
     if (start == null) return '';
 
     final remainder = normalized.substring(start.end);
-    final nextHeading = RegExp(r'^\s*#{1,6}\s+.+$', multiLine: true)
-        .firstMatch(remainder);
+    final nextHeading = RegExp(
+      r'^\s*#{1,6}\s+.+$',
+      multiLine: true,
+    ).firstMatch(remainder);
 
     final content = nextHeading == null
         ? remainder
@@ -539,15 +530,17 @@ class _DetailMetaRow extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           label,
-          style: AuraTypography.caption(colors.textTertiary)
-              .copyWith(letterSpacing: 0.4),
+          style: AuraTypography.caption(
+            colors.textTertiary,
+          ).copyWith(letterSpacing: 0.4),
         ),
         const SizedBox(width: AuraSpacing.sm),
         Expanded(
           child: Text(
             value,
-            style: AuraTypography.bodyMedium(colors.textPrimary)
-                .copyWith(fontWeight: FontWeight.w600),
+            style: AuraTypography.bodyMedium(
+              colors.textPrimary,
+            ).copyWith(fontWeight: FontWeight.w600),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),

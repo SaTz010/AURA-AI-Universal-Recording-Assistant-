@@ -8,6 +8,7 @@ import '../../services/summaries_library_events.dart';
 import '../../services/summaries_storage.dart';
 import '../../theme/aura_theme.dart';
 import '../../theme/aura_tokens.dart';
+import '../../widgets/aura_snack_bar.dart';
 import '../summarized_audio_detail_screen.dart';
 import 'analyzing_screen.dart';
 
@@ -56,9 +57,13 @@ class SummarizationFlow {
 
     try {
       final existing = await SummariesStorage.load(uid);
-      final existingItem = existing.where((s) => s.filePath == audioPath).cast<SummarizedAudio?>().firstOrNull;
+      if (!context.mounted) return null;
+
+      final existingItem = existing
+          .where((s) => s.filePath == audioPath)
+          .cast<SummarizedAudio?>()
+          .firstOrNull;
       if (existingItem != null) {
-        if (!context.mounted) return existingItem;
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => SummarizedAudioDetailScreen(summary: existingItem),
@@ -78,9 +83,15 @@ class SummarizationFlow {
         descriptions: contextDescriptions,
       );
       if (!context.mounted) return null;
-      if (contextKey == null || !contextOptions.containsKey(contextKey)) return null;
+      if (contextKey == null || !contextOptions.containsKey(contextKey)) {
+        return null;
+      }
 
-      final extraDetails = await _openExtraDetailsSheet(context, colors: colors, title: title);
+      final extraDetails = await _openExtraDetailsSheet(
+        context,
+        colors: colors,
+        title: title,
+      );
       if (!context.mounted) return null;
       if (extraDetails == null) return null;
 
@@ -113,11 +124,10 @@ class SummarizationFlow {
       );
     } catch (_) {
       if (!context.mounted) return null;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Failed to start summarization'),
-          backgroundColor: colors.surface,
-        ),
+      showAuraSnackBar(
+        context,
+        message: 'We could not start summarizing. Please try again.',
+        backgroundColor: colors.surface,
       );
       return null;
     }
@@ -178,31 +188,29 @@ class SummarizationFlow {
         Navigator.of(context).pop();
       }
 
-      String message = 'Failed to process audio';
+      String message = 'We could not process this audio. Please try again.';
       if (e is ApiException) {
         message = e.message;
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(seconds: 5),
-          action: SnackBarAction(
-            label: 'Retry',
-            onPressed: () {
-              unawaited(
-                _retryWithLoading(
-                  context,
-                  apiService: apiService,
-                  uid: uid,
-                  audioPath: audioPath,
-                  audioFileName: audioFileName,
-                  category: category,
-                  detail: detail,
-                ),
-              );
-            },
-          ),
+      showAuraSnackBar(
+        context,
+        message: message,
+        action: SnackBarAction(
+          label: 'Retry',
+          onPressed: () {
+            unawaited(
+              _retryWithLoading(
+                context,
+                apiService: apiService,
+                uid: uid,
+                audioPath: audioPath,
+                audioFileName: audioFileName,
+                category: category,
+                detail: detail,
+              ),
+            );
+          },
         ),
       );
 
@@ -307,26 +315,35 @@ class SummarizationFlow {
                               children: [
                                 Text(
                                   'What type of recording is this?',
-                                  style: AuraTypography.titleLarge(sheetColors.textPrimary),
+                                  style: AuraTypography.titleLarge(
+                                    sheetColors.textPrimary,
+                                  ),
                                 ),
                                 const SizedBox(height: AuraSpacing.xs),
                                 Text(
                                   'Choosing the right context helps AURA generate a more accurate and tailored summary for your content.',
-                                  style: AuraTypography.bodySmall(sheetColors.textSecondary),
+                                  style: AuraTypography.bodySmall(
+                                    sheetColors.textSecondary,
+                                  ),
                                 ),
                               ],
                             ),
                           ),
                           IconButton(
                             onPressed: () => Navigator.of(ctx).pop(),
-                            icon: Icon(Icons.close_rounded, color: sheetColors.iconDefault),
+                            icon: Icon(
+                              Icons.close_rounded,
+                              color: sheetColors.iconDefault,
+                            ),
                             tooltip: 'Close',
                           ),
                         ],
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: AuraSpacing.base),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AuraSpacing.base,
+                      ),
                       child: Container(
                         decoration: BoxDecoration(
                           color: sheetColors.surfaceElevated,
@@ -348,8 +365,9 @@ class SummarizationFlow {
                             Expanded(
                               child: Text(
                                 title,
-                                style: AuraTypography.bodyMedium(sheetColors.textPrimary)
-                                    .copyWith(fontWeight: FontWeight.w600),
+                                style: AuraTypography.bodyMedium(
+                                  sheetColors.textPrimary,
+                                ).copyWith(fontWeight: FontWeight.w600),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -372,7 +390,8 @@ class SummarizationFlow {
                             const SizedBox(height: AuraSpacing.sm),
                         itemBuilder: (context, index) {
                           final entry = options.entries.elementAt(index);
-                          final icon = icons[entry.key] ?? Icons.auto_awesome_rounded;
+                          final icon =
+                              icons[entry.key] ?? Icons.auto_awesome_rounded;
                           final description = descriptions[entry.key] ?? '';
                           return Material(
                             color: Colors.transparent,
@@ -393,22 +412,33 @@ class SummarizationFlow {
                                 ),
                                 child: Row(
                                   children: [
-                                    Icon(icon, color: sheetColors.accent, size: 24),
+                                    Icon(
+                                      icon,
+                                      color: sheetColors.accent,
+                                      size: 24,
+                                    ),
                                     const SizedBox(width: AuraSpacing.md),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             entry.value,
-                                            style: AuraTypography.bodyMedium(sheetColors.textPrimary)
-                                                .copyWith(fontWeight: FontWeight.w600),
+                                            style:
+                                                AuraTypography.bodyMedium(
+                                                  sheetColors.textPrimary,
+                                                ).copyWith(
+                                                  fontWeight: FontWeight.w600,
+                                                ),
                                           ),
                                           if (description.isNotEmpty) ...[
                                             const SizedBox(height: 2),
                                             Text(
                                               description,
-                                              style: AuraTypography.caption(sheetColors.textSecondary),
+                                              style: AuraTypography.caption(
+                                                sheetColors.textSecondary,
+                                              ),
                                             ),
                                           ],
                                         ],
@@ -458,7 +488,9 @@ class SummarizationFlow {
         return SafeArea(
           top: false,
           child: Padding(
-            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            ),
             child: Container(
               decoration: BoxDecoration(
                 color: sheetColors.surface,
@@ -486,12 +518,17 @@ class SummarizationFlow {
                           Expanded(
                             child: Text(
                               'Any extra detail?',
-                              style: AuraTypography.titleLarge(sheetColors.textPrimary),
+                              style: AuraTypography.titleLarge(
+                                sheetColors.textPrimary,
+                              ),
                             ),
                           ),
                           IconButton(
                             onPressed: () => Navigator.of(ctx).pop(),
-                            icon: Icon(Icons.close_rounded, color: sheetColors.iconDefault),
+                            icon: Icon(
+                              Icons.close_rounded,
+                              color: sheetColors.iconDefault,
+                            ),
                             tooltip: 'Close',
                           ),
                         ],
@@ -509,8 +546,9 @@ class SummarizationFlow {
                         ),
                         child: Text(
                           title,
-                          style: AuraTypography.bodyMedium(sheetColors.textPrimary)
-                              .copyWith(fontWeight: FontWeight.w600),
+                          style: AuraTypography.bodyMedium(
+                            sheetColors.textPrimary,
+                          ).copyWith(fontWeight: FontWeight.w600),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -523,7 +561,8 @@ class SummarizationFlow {
                         autocorrect: false,
                         textCapitalization: TextCapitalization.sentences,
                         decoration: InputDecoration(
-                          hintText: 'Optional — add helpful notes for summarization',
+                          hintText:
+                              'Optional — add helpful notes for summarization',
                           filled: true,
                           fillColor: sheetColors.surface,
                           border: OutlineInputBorder(
@@ -539,7 +578,9 @@ class SummarizationFlow {
                             borderSide: BorderSide(color: sheetColors.accent),
                           ),
                         ),
-                        style: AuraTypography.bodyMedium(sheetColors.textPrimary),
+                        style: AuraTypography.bodyMedium(
+                          sheetColors.textPrimary,
+                        ),
                       ),
                       const SizedBox(height: AuraSpacing.lg),
                       ElevatedButton(

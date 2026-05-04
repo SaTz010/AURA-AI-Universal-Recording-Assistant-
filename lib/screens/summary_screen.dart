@@ -16,6 +16,7 @@ import 'widgets/aura_skeleton.dart';
 import 'widgets/summarization_flow.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
+import '../widgets/aura_snack_bar.dart';
 
 class _AudioChoice {
   const _AudioChoice({
@@ -113,9 +114,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
               onPressed: () => Navigator.of(ctx).pop(true),
               child: Text(
                 'Delete',
-                style: AuraTypography.bodyMedium(colors.accent).copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: AuraTypography.bodyMedium(
+                  colors.accent,
+                ).copyWith(fontWeight: FontWeight.w700),
               ),
             ),
           ],
@@ -151,10 +152,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
   }
 
   Future<void> _loadAll() async {
-    await Future.wait([
-      _loadRecordings(),
-      _loadSummaries(),
-    ]);
+    await Future.wait([_loadRecordings(), _loadSummaries()]);
   }
 
   Future<void> _loadRecordings() async {
@@ -170,17 +168,14 @@ class _SummaryScreenState extends State<SummaryScreen> {
           })
           .toList();
 
-      final choices = files
-          .map((f) {
-            final fileName = f.path.split(RegExp(r'[\\/]')).last;
-            return _AudioChoice(
-              filePath: f.path,
-              fileName: fileName,
-              modified: f.lastModifiedSync(),
-            );
-          })
-          .toList()
-        ..sort((a, b) => b.modified.compareTo(a.modified));
+      final choices = files.map((f) {
+        final fileName = f.path.split(RegExp(r'[\\/]')).last;
+        return _AudioChoice(
+          filePath: f.path,
+          fileName: fileName,
+          modified: f.lastModifiedSync(),
+        );
+      }).toList()..sort((a, b) => b.modified.compareTo(a.modified));
 
       if (!mounted) return;
       setState(() {
@@ -229,7 +224,8 @@ class _SummaryScreenState extends State<SummaryScreen> {
 
   String _formatRelativeDateTime(DateTime dt) {
     final now = DateTime.now();
-    final isSameDay = now.year == dt.year && now.month == dt.month && now.day == dt.day;
+    final isSameDay =
+        now.year == dt.year && now.month == dt.month && now.day == dt.day;
 
     final hour12 = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
     final minute = dt.minute.toString().padLeft(2, '0');
@@ -310,12 +306,17 @@ class _SummaryScreenState extends State<SummaryScreen> {
                           Expanded(
                             child: Text(
                               'Select a recording',
-                              style: AuraTypography.titleLarge(sheetColors.textPrimary),
+                              style: AuraTypography.titleLarge(
+                                sheetColors.textPrimary,
+                              ),
                             ),
                           ),
                           IconButton(
                             onPressed: () => Navigator.of(ctx).pop(),
-                            icon: Icon(Icons.close_rounded, color: sheetColors.iconDefault),
+                            icon: Icon(
+                              Icons.close_rounded,
+                              color: sheetColors.iconDefault,
+                            ),
                             tooltip: 'Close',
                           ),
                         ],
@@ -324,12 +325,16 @@ class _SummaryScreenState extends State<SummaryScreen> {
                     Expanded(
                       child: _recordings.isEmpty
                           ? Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: AuraSpacing.xl),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AuraSpacing.xl,
+                              ),
                               child: Center(
                                 child: Text(
                                   'No recordings found',
                                   textAlign: TextAlign.center,
-                                  style: AuraTypography.bodyMedium(sheetColors.textSecondary),
+                                  style: AuraTypography.bodyMedium(
+                                    sheetColors.textSecondary,
+                                  ),
                                 ),
                               ),
                             )
@@ -352,7 +357,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
                                   decoration: BoxDecoration(
                                     color: sheetColors.surface,
                                     borderRadius: AuraRadius.mdBr,
-                                    border: Border.all(color: sheetColors.border),
+                                    border: Border.all(
+                                      color: sheetColors.border,
+                                    ),
                                     boxShadow: AuraElevation.low(Colors.black),
                                   ),
                                   child: Material(
@@ -372,24 +379,34 @@ class _SummaryScreenState extends State<SummaryScreen> {
                                           children: [
                                             Expanded(
                                               child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
                                                 children: [
                                                   Text(
                                                     title,
-                                                    style: AuraTypography.bodyLarge(
-                                                      sheetColors.textPrimary,
-                                                    ).copyWith(
-                                                      fontWeight: FontWeight.w600,
-                                                    ),
-                                                    overflow: TextOverflow.ellipsis,
+                                                    style:
+                                                        AuraTypography.bodyLarge(
+                                                          sheetColors
+                                                              .textPrimary,
+                                                        ).copyWith(
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                        ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
                                                   ),
                                                   const SizedBox(height: 4),
                                                   Text(
-                                                    _formatRelativeDateTime(r.modified),
-                                                    style: AuraTypography.caption(
-                                                      sheetColors.textSecondary,
+                                                    _formatRelativeDateTime(
+                                                      r.modified,
                                                     ),
-                                                    overflow: TextOverflow.ellipsis,
+                                                    style:
+                                                        AuraTypography.caption(
+                                                          sheetColors
+                                                              .textSecondary,
+                                                        ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
                                                   ),
                                                 ],
                                               ),
@@ -444,11 +461,10 @@ class _SummaryScreenState extends State<SummaryScreen> {
       final file = result.files.single;
       final audioPath = file.path;
       if (audioPath == null || audioPath.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Selected file path is not available on this platform'),
-            backgroundColor: colors.surface,
-          ),
+        showAuraSnackBar(
+          context,
+          message: 'We could not access that file. Please choose it again.',
+          backgroundColor: colors.surface,
         );
         return;
       }
@@ -462,11 +478,10 @@ class _SummaryScreenState extends State<SummaryScreen> {
       );
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Unable to open file picker'),
-          backgroundColor: colors.surface,
-        ),
+      showAuraSnackBar(
+        context,
+        message: 'We could not open the file picker. Please try again.',
+        backgroundColor: colors.surface,
       );
     } finally {
       if (mounted) {
@@ -484,7 +499,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
 
     setState(() => _selected = selected);
 
-    final already = _summaries.where((s) => s.filePath == selected.filePath).firstOrNull;
+    final already = _summaries
+        .where((s) => s.filePath == selected.filePath)
+        .firstOrNull;
     if (already != null) {
       setState(() => _selected = null);
       await Navigator.of(context).push(
@@ -521,7 +538,10 @@ class _SummaryScreenState extends State<SummaryScreen> {
           scrolledUnderElevation: 0,
           elevation: 0,
           automaticallyImplyLeading: false,
-          title: Text('Summarize', style: AuraTypography.titleLarge(colors.textPrimary)),
+          title: Text(
+            'Summarize',
+            style: AuraTypography.titleLarge(colors.textPrimary),
+          ),
           centerTitle: false,
         ),
         body: Center(
@@ -530,7 +550,11 @@ class _SummaryScreenState extends State<SummaryScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.lock_person_rounded, size: 56, color: colors.iconDefault),
+                Icon(
+                  Icons.lock_person_rounded,
+                  size: 56,
+                  color: colors.iconDefault,
+                ),
                 const SizedBox(height: AuraSpacing.base),
                 Text(
                   'Login to summarize',
@@ -546,7 +570,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
                 const SizedBox(height: AuraSpacing.lg),
                 ElevatedButton(
                   onPressed: () {
-                    Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
+                    Navigator.of(
+                      context,
+                    ).pushNamedAndRemoveUntil('/auth', (route) => false);
                   },
                   child: const Text('Go to Login'),
                 ),
@@ -565,7 +591,10 @@ class _SummaryScreenState extends State<SummaryScreen> {
         scrolledUnderElevation: 0,
         elevation: 0,
         automaticallyImplyLeading: false,
-        title: Text('Summarize', style: AuraTypography.titleLarge(colors.textPrimary)),
+        title: Text(
+          'Summarize',
+          style: AuraTypography.titleLarge(colors.textPrimary),
+        ),
         centerTitle: false,
       ),
       body: Padding(
@@ -592,7 +621,11 @@ class _SummaryScreenState extends State<SummaryScreen> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.auto_awesome_rounded, color: colors.accent, size: 24),
+                      Icon(
+                        Icons.auto_awesome_rounded,
+                        color: colors.accent,
+                        size: 24,
+                      ),
                       const SizedBox(width: AuraSpacing.md),
                       Expanded(
                         child: Column(
@@ -600,12 +633,16 @@ class _SummaryScreenState extends State<SummaryScreen> {
                           children: [
                             Text(
                               'Summarize an audio',
-                              style: AuraTypography.titleSmall(colors.textPrimary),
+                              style: AuraTypography.titleSmall(
+                                colors.textPrimary,
+                              ),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               'Import or either select a recording to generate AI-powered summaries and transcriptions.',
-                              style: AuraTypography.caption(colors.textSecondary),
+                              style: AuraTypography.caption(
+                                colors.textSecondary,
+                              ),
                             ),
                           ],
                         ),
@@ -629,9 +666,9 @@ class _SummaryScreenState extends State<SummaryScreen> {
                           Expanded(
                             child: Text(
                               _displayTitle(_selected!.fileName),
-                              style: AuraTypography.bodyMedium(colors.textPrimary).copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
+                              style: AuraTypography.bodyMedium(
+                                colors.textPrimary,
+                              ).copyWith(fontWeight: FontWeight.w600),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -707,94 +744,112 @@ class _SummaryScreenState extends State<SummaryScreen> {
                 child: _isLoadingSummaries
                     ? const _SummariesListSkeleton(key: ValueKey('skeleton'))
                     : _summaries.isEmpty
-                        ? Center(
-                            key: const ValueKey('empty'),
-                            child: Text(
-                              'No summarized audios yet',
-                              style: AuraTypography.bodyMedium(colors.textSecondary),
-                            ),
-                          )
-                        : ListView.separated(
-                            key: const ValueKey('content'),
-                          padding: const EdgeInsets.only(bottom: AuraSpacing.lg),
-                          separatorBuilder: (context, index) =>
-                              const SizedBox(height: AuraSpacing.sm),
-                          itemCount: _summaries.length,
-                          itemBuilder: (ctx, index) {
-                            final s = _summaries[index];
-                            final title = _displayTitle(s.fileName);
-                            final createdAt = DateTime.fromMillisecondsSinceEpoch(s.createdAtMs);
-                            return Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                borderRadius: AuraRadius.mdBr,
-                                onTap: () {
-                                  HapticFeedback.lightImpact();
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => SummarizedAudioDetailScreen(summary: s),
+                    ? Center(
+                        key: const ValueKey('empty'),
+                        child: Text(
+                          'No summarized audios yet',
+                          style: AuraTypography.bodyMedium(
+                            colors.textSecondary,
+                          ),
+                        ),
+                      )
+                    : ListView.separated(
+                        key: const ValueKey('content'),
+                        padding: const EdgeInsets.only(bottom: AuraSpacing.lg),
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: AuraSpacing.sm),
+                        itemCount: _summaries.length,
+                        itemBuilder: (ctx, index) {
+                          final s = _summaries[index];
+                          final title = _displayTitle(s.fileName);
+                          final createdAt = DateTime.fromMillisecondsSinceEpoch(
+                            s.createdAtMs,
+                          );
+                          return Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: AuraRadius.mdBr,
+                              onTap: () {
+                                HapticFeedback.lightImpact();
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        SummarizedAudioDetailScreen(summary: s),
+                                  ),
+                                );
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: colors.surface,
+                                  borderRadius: AuraRadius.mdBr,
+                                  border: Border.all(color: colors.border),
+                                  boxShadow: AuraElevation.low(Colors.black),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AuraSpacing.lg,
+                                  vertical: AuraSpacing.md,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                title,
+                                                style:
+                                                    AuraTypography.bodyLarge(
+                                                      colors.textPrimary,
+                                                    ).copyWith(
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                _formatRelativeDateTime(
+                                                  createdAt,
+                                                ),
+                                                style: AuraTypography.caption(
+                                                  colors.textSecondary,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        IconButton(
+                                          onPressed: () =>
+                                              _deleteSummaryAt(index),
+                                          icon: Icon(
+                                            Icons.delete_outline_rounded,
+                                            color: colors.iconDefault,
+                                          ),
+                                          tooltip: 'Delete summary',
+                                        ),
+                                      ],
                                     ),
-                                  );
-                                },
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: colors.surface,
-                                    borderRadius: AuraRadius.mdBr,
-                                    border: Border.all(color: colors.border),
-                                    boxShadow: AuraElevation.low(Colors.black),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: AuraSpacing.lg,
-                                    vertical: AuraSpacing.md,
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  title,
-                                                  style: AuraTypography.bodyLarge(colors.textPrimary)
-                                                      .copyWith(fontWeight: FontWeight.w600),
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  _formatRelativeDateTime(createdAt),
-                                                  style: AuraTypography.caption(colors.textSecondary),
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          IconButton(
-                                            onPressed: () => _deleteSummaryAt(index),
-                                            icon: Icon(
-                                              Icons.delete_outline_rounded,
-                                              color: colors.iconDefault,
-                                            ),
-                                            tooltip: 'Delete summary',
-                                          ),
-                                        ],
+                                    const SizedBox(height: AuraSpacing.sm),
+                                    Text(
+                                      s.description,
+                                      style: AuraTypography.bodyMedium(
+                                        colors.textSecondary,
                                       ),
-                                      const SizedBox(height: AuraSpacing.sm),
-                                      Text(
-                                        s.description,
-                                        style: AuraTypography.bodyMedium(colors.textSecondary),
-                                        maxLines: 3,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ),
+                                      maxLines: 3,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
                                 ),
                               ),
-                            );
-                          },
-                        ),
+                            ),
+                          );
+                        },
+                      ),
               ),
             ),
           ],
@@ -868,5 +923,3 @@ class _SummariesListSkeleton extends StatelessWidget {
     );
   }
 }
-
-

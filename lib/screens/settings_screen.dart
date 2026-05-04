@@ -5,6 +5,7 @@ import '../providers/auth_provider.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
 import '../theme/theme_provider.dart';
+import '../widgets/aura_snack_bar.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -23,7 +24,10 @@ class SettingsScreen extends StatelessWidget {
         scrolledUnderElevation: 0,
         elevation: 0,
         leading: _BackButton(),
-        title: Text('Settings', style: AuraTypography.titleLarge(colors.textPrimary)),
+        title: Text(
+          'Settings',
+          style: AuraTypography.titleLarge(colors.textPrimary),
+        ),
         centerTitle: false,
       ),
       body: ListView(
@@ -141,11 +145,10 @@ class SettingsScreen extends StatelessWidget {
                   Clipboard.setData(
                     const ClipboardData(text: '+977 9841234567'),
                   );
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Phone number copied to clipboard'),
-                      duration: Duration(seconds: 2),
-                    ),
+                  showAuraSnackBar(
+                    context,
+                    message: 'Phone number copied to clipboard',
+                    duration: auraBriefSnackBarDuration,
                   );
                 },
               ),
@@ -168,14 +171,18 @@ class SettingsScreen extends StatelessWidget {
                       builder: (dialogContext) {
                         return AlertDialog(
                           title: const Text('Logout'),
-                          content: const Text('Are you sure you want to log out?'),
+                          content: const Text(
+                            'Are you sure you want to log out?',
+                          ),
                           actions: [
                             TextButton(
-                              onPressed: () => Navigator.of(dialogContext).pop(false),
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(false),
                               child: const Text('Cancel'),
                             ),
                             TextButton(
-                              onPressed: () => Navigator.of(dialogContext).pop(true),
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(true),
                               child: const Text('Logout'),
                             ),
                           ],
@@ -186,7 +193,9 @@ class SettingsScreen extends StatelessWidget {
                     if (shouldLogout == true && context.mounted) {
                       await authProvider.signOut();
                       if (!context.mounted) return;
-                      Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
+                      Navigator.of(
+                        context,
+                      ).pushNamedAndRemoveUntil('/auth', (route) => false);
                     }
                   },
                 ),
@@ -239,10 +248,9 @@ class _SectionHeader extends StatelessWidget {
       padding: const EdgeInsets.only(left: AuraSpacing.xs),
       child: Text(
         title.toUpperCase(),
-        style: AuraTypography.overline(colors.textTertiary).copyWith(
-          fontWeight: FontWeight.w600,
-          letterSpacing: 1.5,
-        ),
+        style: AuraTypography.overline(
+          colors.textTertiary,
+        ).copyWith(fontWeight: FontWeight.w600, letterSpacing: 1.5),
       ),
     );
   }
@@ -264,9 +272,7 @@ class _SettingsCard extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: AuraRadius.mdBr,
-        child: Column(
-          children: children,
-        ),
+        child: Column(children: children),
       ),
     );
   }
@@ -321,9 +327,15 @@ class _ThemeOptionTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: AuraTypography.bodyLarge(colors.textPrimary)),
+                    Text(
+                      title,
+                      style: AuraTypography.bodyLarge(colors.textPrimary),
+                    ),
                     const SizedBox(height: AuraSpacing.xxs),
-                    Text(subtitle, style: AuraTypography.caption(colors.textSecondary)),
+                    Text(
+                      subtitle,
+                      style: AuraTypography.caption(colors.textSecondary),
+                    ),
                   ],
                 ),
               ),

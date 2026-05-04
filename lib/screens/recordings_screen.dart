@@ -17,17 +17,11 @@ import 'widgets/guest_block.dart';
 import 'widgets/summarization_flow.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
+import '../widgets/aura_snack_bar.dart';
 
 enum _RecordingSource { recorded, uploaded }
 
-enum _SortMode {
-  timeDesc,
-  timeAsc,
-  nameAsc,
-  nameDesc,
-  sizeDesc,
-  sizeAsc,
-}
+enum _SortMode { timeDesc, timeAsc, nameAsc, nameDesc, sizeDesc, sizeAsc }
 
 enum _SourceFilter { all, recorded, uploaded }
 
@@ -54,12 +48,14 @@ class RecordingsScreen extends StatefulWidget {
   State<RecordingsScreen> createState() => _RecordingsScreenState();
 }
 
-class _RecordingsScreenState extends State<RecordingsScreen> with TickerProviderStateMixin {
+class _RecordingsScreenState extends State<RecordingsScreen>
+    with TickerProviderStateMixin {
   List<_RecordingEntry> _allRecordings = const [];
   bool _isLoading = true;
 
   final Map<String, Duration?> _durationCache = {};
-  final Map<String, SummarizedAudio> _summariesMap = {}; // Track summaries by file path
+  final Map<String, SummarizedAudio> _summariesMap =
+      {}; // Track summaries by file path
 
   String? _effectiveUid;
   bool _hasLoadedOnce = false;
@@ -176,7 +172,6 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
     });
   }
 
-
   List<_RecordingEntry> _visibleRecordings() {
     final filtered = _allRecordings.where((r) {
       switch (_sourceFilter) {
@@ -261,7 +256,8 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
         _summariesMap.addAll(summariesMap);
       });
 
-      final newestFirst = [...entries]..sort((a, b) => b.modified.compareTo(a.modified));
+      final newestFirst = [...entries]
+        ..sort((a, b) => b.modified.compareTo(a.modified));
       unawaited(_prefetchDurations(newestFirst.take(25)));
     } catch (_) {
       final elapsed = DateTime.now().difference(start);
@@ -281,7 +277,8 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
 
   String _formatRelativeDateTime(DateTime dt) {
     final now = DateTime.now();
-    final isSameDay = now.year == dt.year && now.month == dt.month && now.day == dt.day;
+    final isSameDay =
+        now.year == dt.year && now.month == dt.month && now.day == dt.day;
 
     final hour12 = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
     final minute = dt.minute.toString().padLeft(2, '0');
@@ -351,11 +348,12 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
         _isPreparing = false;
         _position = Duration.zero;
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() => _isPreparing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading audio: $e')),
+      showAuraSnackBar(
+        context,
+        message: 'We could not load this audio. Please try again.',
       );
     }
   }
@@ -422,11 +420,12 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
         _expandedFilePath = filePath;
         _isPreparing = false;
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() => _isPreparing = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error playing audio: $e')),
+      showAuraSnackBar(
+        context,
+        message: 'We could not play this audio. Please try another recording.',
       );
     }
   }
@@ -455,13 +454,16 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
       await _loadRecordings();
       if (!mounted) return;
       RecordingsLibraryEvents.notifyChanged();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Recording deleted')),
+      showAuraSnackBar(
+        context,
+        message: 'Recording deleted',
+        duration: auraBriefSnackBarDuration,
       );
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error deleting recording: $e')),
+      showAuraSnackBar(
+        context,
+        message: 'We could not delete this recording. Please try again.',
       );
     }
   }
@@ -477,7 +479,9 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
       isScrollControlled: true,
       backgroundColor: colors.surface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AuraRadius.lg)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AuraRadius.lg),
+        ),
       ),
       builder: (sheetContext) {
         final sheetColors = AuraThemeColors.of(sheetContext);
@@ -501,11 +505,17 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
                     Expanded(
                       child: Text(
                         label,
-                        style: AuraTypography.bodyMedium(sheetColors.textPrimary),
+                        style: AuraTypography.bodyMedium(
+                          sheetColors.textPrimary,
+                        ),
                       ),
                     ),
                     if (selected)
-                      Icon(Icons.check_rounded, color: sheetColors.accent, size: 20),
+                      Icon(
+                        Icons.check_rounded,
+                        color: sheetColors.accent,
+                        size: 20,
+                      ),
                   ],
                 ),
               ),
@@ -536,7 +546,9 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
                           Expanded(
                             child: Text(
                               'Filter & Sort',
-                              style: AuraTypography.titleMedium(sheetColors.textPrimary),
+                              style: AuraTypography.titleMedium(
+                                sheetColors.textPrimary,
+                              ),
                             ),
                           ),
                           TextButton(
@@ -557,66 +569,92 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: AuraSpacing.xl),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AuraSpacing.xl,
+                              ),
                               child: Text(
                                 'Sort by',
-                                style: AuraTypography.overline(sheetColors.textSecondary),
+                                style: AuraTypography.overline(
+                                  sheetColors.textSecondary,
+                                ),
                               ),
                             ),
                             const SizedBox(height: AuraSpacing.xs),
                             option(
                               label: 'Time recorded (newest)',
                               selected: tempSort == _SortMode.timeDesc,
-                              onTap: () => setSheetState(() => tempSort = _SortMode.timeDesc),
+                              onTap: () => setSheetState(
+                                () => tempSort = _SortMode.timeDesc,
+                              ),
                             ),
                             option(
                               label: 'Time recorded (oldest)',
                               selected: tempSort == _SortMode.timeAsc,
-                              onTap: () => setSheetState(() => tempSort = _SortMode.timeAsc),
+                              onTap: () => setSheetState(
+                                () => tempSort = _SortMode.timeAsc,
+                              ),
                             ),
                             option(
                               label: 'Name (A → Z)',
                               selected: tempSort == _SortMode.nameAsc,
-                              onTap: () => setSheetState(() => tempSort = _SortMode.nameAsc),
+                              onTap: () => setSheetState(
+                                () => tempSort = _SortMode.nameAsc,
+                              ),
                             ),
                             option(
                               label: 'Name (Z → A)',
                               selected: tempSort == _SortMode.nameDesc,
-                              onTap: () => setSheetState(() => tempSort = _SortMode.nameDesc),
+                              onTap: () => setSheetState(
+                                () => tempSort = _SortMode.nameDesc,
+                              ),
                             ),
                             option(
                               label: 'Size (largest)',
                               selected: tempSort == _SortMode.sizeDesc,
-                              onTap: () => setSheetState(() => tempSort = _SortMode.sizeDesc),
+                              onTap: () => setSheetState(
+                                () => tempSort = _SortMode.sizeDesc,
+                              ),
                             ),
                             option(
                               label: 'Size (smallest)',
                               selected: tempSort == _SortMode.sizeAsc,
-                              onTap: () => setSheetState(() => tempSort = _SortMode.sizeAsc),
+                              onTap: () => setSheetState(
+                                () => tempSort = _SortMode.sizeAsc,
+                              ),
                             ),
                             const SizedBox(height: AuraSpacing.sm),
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: AuraSpacing.xl),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AuraSpacing.xl,
+                              ),
                               child: Text(
                                 'Source',
-                                style: AuraTypography.overline(sheetColors.textSecondary),
+                                style: AuraTypography.overline(
+                                  sheetColors.textSecondary,
+                                ),
                               ),
                             ),
                             const SizedBox(height: AuraSpacing.xs),
                             option(
                               label: 'All',
                               selected: tempSource == _SourceFilter.all,
-                              onTap: () => setSheetState(() => tempSource = _SourceFilter.all),
+                              onTap: () => setSheetState(
+                                () => tempSource = _SourceFilter.all,
+                              ),
                             ),
                             option(
                               label: 'Recorded',
                               selected: tempSource == _SourceFilter.recorded,
-                              onTap: () => setSheetState(() => tempSource = _SourceFilter.recorded),
+                              onTap: () => setSheetState(
+                                () => tempSource = _SourceFilter.recorded,
+                              ),
                             ),
                             option(
                               label: 'Uploaded',
                               selected: tempSource == _SourceFilter.uploaded,
-                              onTap: () => setSheetState(() => tempSource = _SourceFilter.uploaded),
+                              onTap: () => setSheetState(
+                                () => tempSource = _SourceFilter.uploaded,
+                              ),
                             ),
                             const SizedBox(height: AuraSpacing.lg),
                           ],
@@ -664,7 +702,10 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
         scrolledUnderElevation: 0,
         elevation: 0,
         automaticallyImplyLeading: false,
-        title: Text('Recordings', style: AuraTypography.titleLarge(colors.textPrimary)),
+        title: Text(
+          'Recordings',
+          style: AuraTypography.titleLarge(colors.textPrimary),
+        ),
         centerTitle: false,
         actions: [
           IconButton(
@@ -685,8 +726,8 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
                 key: const ValueKey('content'),
                 child: visible.isEmpty
                     ? (_allRecordings.isEmpty
-                        ? _buildEmptyState(colors)
-                        : _buildFilteredEmptyState(colors))
+                          ? _buildEmptyState(colors)
+                          : _buildFilteredEmptyState(colors))
                     : _buildRecordingsList(colors, visible),
               ),
       ),
@@ -705,10 +746,17 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
               shape: BoxShape.circle,
               color: colors.surfaceElevated,
             ),
-            child: Icon(Icons.mic_rounded, size: 48, color: colors.textTertiary),
+            child: Icon(
+              Icons.mic_rounded,
+              size: 48,
+              color: colors.textTertiary,
+            ),
           ),
           const SizedBox(height: AuraSpacing.xl),
-          Text('No Recordings', style: AuraTypography.headlineMedium(colors.textPrimary)),
+          Text(
+            'No Recordings',
+            style: AuraTypography.headlineMedium(colors.textPrimary),
+          ),
           const SizedBox(height: AuraSpacing.sm),
           Text(
             'Start recording to see your files here',
@@ -777,13 +825,17 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
     );
   }
 
-  Widget _buildRecordingsList(AuraThemeColors colors, List<_RecordingEntry> recordings) {
+  Widget _buildRecordingsList(
+    AuraThemeColors colors,
+    List<_RecordingEntry> recordings,
+  ) {
     return ListView.separated(
       padding: const EdgeInsets.symmetric(
         horizontal: AuraSpacing.base,
         vertical: AuraSpacing.lg,
       ),
-      separatorBuilder: (_, separatorIndex) => const SizedBox(height: AuraSpacing.sm),
+      separatorBuilder: (_, separatorIndex) =>
+          const SizedBox(height: AuraSpacing.sm),
       itemCount: recordings.length,
       itemBuilder: (context, index) {
         final entry = recordings[index];
@@ -832,15 +884,17 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
                           children: [
                             Text(
                               title,
-                              style: AuraTypography.bodyLarge(colors.textPrimary).copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
+                              style: AuraTypography.bodyLarge(
+                                colors.textPrimary,
+                              ).copyWith(fontWeight: FontWeight.w600),
                               overflow: TextOverflow.ellipsis,
                             ),
                             const SizedBox(height: 4),
                             Text(
                               _formatRelativeDateTime(lastModified),
-                              style: AuraTypography.caption(colors.textSecondary),
+                              style: AuraTypography.caption(
+                                colors.textSecondary,
+                              ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ],
@@ -875,17 +929,22 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
                         filePath: file.path,
                         isActive: isActive,
                         isPlaying: isPlaying,
-                        isPreparing: _isPreparing && _loadedFilePath != file.path,
+                        isPreparing:
+                            _isPreparing && _loadedFilePath != file.path,
                         position: isActive ? _position : Duration.zero,
                         duration: isActive ? _duration : Duration.zero,
                         formatDuration: _formatDuration,
                         onPlayPause: () => _playRecording(file.path),
                         onSeekToSeconds: (seconds) =>
                             _audioPlayer.seek(Duration(seconds: seconds)),
-                        onSkipBack: () =>
-                            _seekRelative(file.path, const Duration(seconds: -15)),
-                        onSkipForward: () =>
-                            _seekRelative(file.path, const Duration(seconds: 15)),
+                        onSkipBack: () => _seekRelative(
+                          file.path,
+                          const Duration(seconds: -15),
+                        ),
+                        onSkipForward: () => _seekRelative(
+                          file.path,
+                          const Duration(seconds: 15),
+                        ),
                         onDelete: () => _showDeleteDialog(
                           context,
                           entry.fileName,
@@ -894,7 +953,8 @@ class _RecordingsScreenState extends State<RecordingsScreen> with TickerProvider
                         ),
                         onSummarize: () => _startSummarizeFlowForEntry(entry),
                         onViewSummary: _summariesMap.containsKey(file.path)
-                            ? () => _viewStoredSummary(_summariesMap[file.path]!)
+                            ? () =>
+                                  _viewStoredSummary(_summariesMap[file.path]!)
                             : null,
                       )
                     : const SizedBox.shrink(),
@@ -997,17 +1057,14 @@ class _InlinePlayer extends StatelessWidget {
     final remainingRaw = duration - position;
     final remaining = remainingRaw.isNegative ? Duration.zero : remainingRaw;
 
-    final skipTextStyle = AuraTypography.bodyMedium(colors.iconDefault).copyWith(
-      fontWeight: FontWeight.w800,
-      letterSpacing: 0.2,
-    );
+    final skipTextStyle = AuraTypography.bodyMedium(
+      colors.iconDefault,
+    ).copyWith(fontWeight: FontWeight.w800, letterSpacing: 0.2);
 
     Widget skipText(String label) {
       return SizedBox(
         width: 34,
-        child: Center(
-          child: Text(label, style: skipTextStyle),
-        ),
+        child: Center(child: Text(label, style: skipTextStyle)),
       );
     }
 

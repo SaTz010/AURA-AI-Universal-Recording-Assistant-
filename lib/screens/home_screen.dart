@@ -11,6 +11,7 @@ import '../services/api_service.dart';
 import '../services/wake_backend.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
+import '../widgets/aura_snack_bar.dart';
 import 'recording_session_screen.dart';
 import 'widgets/dashboard_lower_content.dart';
 import 'widgets/guest_block.dart';
@@ -46,9 +47,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       duration: const Duration(milliseconds: 1500),
     )..repeat();
 
-    _pulseAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _pulseController, curve: Curves.easeOut),
-    );
+    _pulseAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _pulseController, curve: Curves.easeOut));
 
     _micController = AnimationController(
       vsync: this,
@@ -90,11 +92,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       final file = result.files.single;
       final audioPath = file.path;
       if (audioPath == null || audioPath.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Selected file path is not available on this platform'),
-            backgroundColor: colors.surface,
-          ),
+        showAuraSnackBar(
+          context,
+          message: 'We could not access that file. Please choose it again.',
+          backgroundColor: colors.surface,
         );
         return;
       }
@@ -111,11 +112,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       );
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Unable to open file picker'),
-          backgroundColor: colors.surface,
-        ),
+      showAuraSnackBar(
+        context,
+        message: 'We could not open the file picker. Please try again.',
+        backgroundColor: colors.surface,
       );
     } finally {
       _isPickingUpload = false;
@@ -152,9 +152,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       setState(() => _recordingStatus = '');
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Recording saved: $result')),
-    );
+    showAuraSnackBar(context, message: 'Recording saved: $result');
   }
 
   void _selectTab(int index) {
@@ -171,7 +169,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       context: context,
       backgroundColor: colors.surface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AuraRadius.lg)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AuraRadius.lg),
+        ),
       ),
       builder: (sheetContext) {
         final sheetColors = AuraThemeColors.of(sheetContext);
@@ -219,7 +219,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     onPressed: () {
                       Navigator.pop(sheetContext);
                       // Let the sheet dismiss before opening the picker.
-                      Future<void>.delayed(AuraMotion.instant, _pickAndProcessUploadedAudio);
+                      Future<void>.delayed(
+                        AuraMotion.instant,
+                        _pickAndProcessUploadedAudio,
+                      );
                     },
                     child: const Text('Choose file'),
                   ),
@@ -244,13 +247,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final currentUser = FirebaseAuth.instance.currentUser;
     final userDocStream = currentUser == null
         ? null
-        : FirebaseFirestore.instance.collection('users').doc(currentUser.uid).snapshots();
+        : FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUser.uid)
+              .snapshots();
 
-    final overlayStyle = (isDarkTheme ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark).copyWith(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: isDarkTheme ? Brightness.light : Brightness.dark,
-      statusBarBrightness: isDarkTheme ? Brightness.dark : Brightness.light,
-    );
+    final overlayStyle =
+        (isDarkTheme ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark)
+            .copyWith(
+              statusBarColor: Colors.transparent,
+              statusBarIconBrightness: isDarkTheme
+                  ? Brightness.light
+                  : Brightness.dark,
+              statusBarBrightness: isDarkTheme
+                  ? Brightness.dark
+                  : Brightness.light,
+            );
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -291,290 +303,350 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             horizontal: AuraSpacing.xl,
                             vertical: AuraSpacing.lg,
                           ),
-                          child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-                  stream: userDocStream,
-                  builder: (context, snapshot) {
-                    final data = snapshot.data?.data();
-                    final name = (data?['name'] as String?)?.trim();
-                    final photoUrl = (data?['photoUrl'] as String?)?.trim();
+                          child:
+                              StreamBuilder<
+                                DocumentSnapshot<Map<String, dynamic>>
+                              >(
+                                stream: userDocStream,
+                                builder: (context, snapshot) {
+                                  final data = snapshot.data?.data();
+                                  final name = (data?['name'] as String?)
+                                      ?.trim();
+                                  final photoUrl =
+                                      (data?['photoUrl'] as String?)?.trim();
 
-                    final fallbackName = (currentUser?.displayName?.trim().isNotEmpty ?? false)
-                        ? currentUser!.displayName!.trim()
-                        : 'there';
+                                  final fallbackName =
+                                      (currentUser?.displayName
+                                              ?.trim()
+                                              .isNotEmpty ??
+                                          false)
+                                      ? currentUser!.displayName!.trim()
+                                      : 'there';
 
-                    final displayName = (name != null && name.isNotEmpty) ? name : fallbackName;
-                    final effectivePhoto = (photoUrl != null && photoUrl.isNotEmpty)
-                        ? photoUrl
-                        : currentUser?.photoURL;
+                                  final displayName =
+                                      (name != null && name.isNotEmpty)
+                                      ? name
+                                      : fallbackName;
+                                  final effectivePhoto =
+                                      (photoUrl != null && photoUrl.isNotEmpty)
+                                      ? photoUrl
+                                      : currentUser?.photoURL;
 
-                    return Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Material(
-                              color: Colors.transparent,
-                              shape: const CircleBorder(),
-                              child: InkWell(
-                                customBorder: const CircleBorder(),
-                                onTap: () {
-                                  HapticFeedback.lightImpact();
-                                  _selectTab(3);
+                                  return Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Material(
+                                            color: Colors.transparent,
+                                            shape: const CircleBorder(),
+                                            child: InkWell(
+                                              customBorder:
+                                                  const CircleBorder(),
+                                              onTap: () {
+                                                HapticFeedback.lightImpact();
+                                                _selectTab(3);
+                                              },
+                                              child: Padding(
+                                                padding: const EdgeInsets.all(
+                                                  AuraSpacing.xxs,
+                                                ),
+                                                child: CircleAvatar(
+                                                  radius: 20,
+                                                  backgroundColor:
+                                                      colors.surfaceElevated,
+                                                  backgroundImage:
+                                                      (effectivePhoto != null &&
+                                                          effectivePhoto
+                                                              .isNotEmpty)
+                                                      ? NetworkImage(
+                                                          effectivePhoto,
+                                                        )
+                                                      : null,
+                                                  child:
+                                                      (effectivePhoto == null ||
+                                                          effectivePhoto
+                                                              .isEmpty)
+                                                      ? Icon(
+                                                          Icons.person_rounded,
+                                                          color: colors
+                                                              .iconDefault,
+                                                          size: 22,
+                                                        )
+                                                      : null,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: AuraSpacing.md),
+                                          Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                'Hello,',
+                                                style: AuraTypography.caption(
+                                                  colors.textSecondary,
+                                                ).copyWith(letterSpacing: 0.4),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              ConstrainedBox(
+                                                constraints:
+                                                    const BoxConstraints(
+                                                      maxWidth: 170,
+                                                    ),
+                                                child: Text(
+                                                  displayName,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style:
+                                                      AuraTypography.bodyLarge(
+                                                        colors.textPrimary,
+                                                      ).copyWith(
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        height: 1.1,
+                                                      ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                      Material(
+                                        color: Colors.transparent,
+                                        borderRadius: AuraRadius.smBr,
+                                        child: InkWell(
+                                          borderRadius: AuraRadius.smBr,
+                                          onTap: () {
+                                            HapticFeedback.lightImpact();
+                                            _showUploadSheet();
+                                          },
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(
+                                              AuraSpacing.xs,
+                                            ),
+                                            child: Icon(
+                                              Icons.cloud_upload_outlined,
+                                              color: colors.iconDefault,
+                                              size: 24,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  );
                                 },
-                                child: Padding(
-                                  padding: const EdgeInsets.all(AuraSpacing.xxs),
-                                  child: CircleAvatar(
-                                    radius: 20,
-                                    backgroundColor: colors.surfaceElevated,
-                                    backgroundImage: (effectivePhoto != null &&
-                                            effectivePhoto.isNotEmpty)
-                                        ? NetworkImage(effectivePhoto)
-                                        : null,
-                                    child: (effectivePhoto == null || effectivePhoto.isEmpty)
-                                        ? Icon(
-                                            Icons.person_rounded,
-                                            color: colors.iconDefault,
-                                            size: 22,
-                                          )
-                                        : null,
+                              ),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        0,
+                        AuraSpacing.huge,
+                        0,
+                        AuraSpacing.xxl,
+                      ),
+                      child: Column(
+                        children: [
+                          Text(
+                            'AURA',
+                            style: AuraTypography.headlineLarge(
+                              colors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: AuraSpacing.sm),
+                          Container(
+                            width: 40,
+                            height: 2,
+                            decoration: BoxDecoration(
+                              color: colors.textTertiary.withValues(alpha: 0.5),
+                              borderRadius: AuraRadius.fullBr,
+                            ),
+                          ),
+                          const SizedBox(height: AuraSpacing.base),
+                          Text(
+                            'Record now or import \n existing audio files to get started',
+                            textAlign: TextAlign.center,
+                            style: AuraTypography.bodyLarge(
+                              colors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Center(
+                      child: SizedBox(
+                        width: 260,
+                        height: 260,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            AnimatedBuilder(
+                              animation: _pulseAnimation,
+                              builder: (context, child) {
+                                return Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    Container(
+                                      width: 220 + (_pulseAnimation.value * 40),
+                                      height:
+                                          220 + (_pulseAnimation.value * 40),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: colors.accent.withValues(
+                                            alpha:
+                                                (1 - _pulseAnimation.value) *
+                                                0.25,
+                                          ),
+                                          width: 1.5,
+                                        ),
+                                      ),
+                                    ),
+                                    Container(
+                                      width: 190 + (_pulseAnimation.value * 30),
+                                      height:
+                                          190 + (_pulseAnimation.value * 30),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: colors.accent.withValues(
+                                            alpha:
+                                                (1 - _pulseAnimation.value) *
+                                                0.12,
+                                          ),
+                                          width: 1,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              },
+                            ),
+                            GestureDetector(
+                              onTap: () {
+                                HapticFeedback.mediumImpact();
+                                wakeBackend();
+                                _openRecordingSession();
+                              },
+                              child: ScaleTransition(
+                                scale: Tween<double>(begin: 1.0, end: 0.92)
+                                    .animate(
+                                      CurvedAnimation(
+                                        parent: _micController,
+                                        curve: AuraMotion.standard,
+                                      ),
+                                    ),
+                                child: Container(
+                                  width: 140,
+                                  height: 140,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: colors.micButton,
+                                    boxShadow: AuraElevation.glow(
+                                      colors.micButton,
+                                    ),
+                                  ),
+                                  child: Center(
+                                    child: Icon(
+                                      Icons.mic_rounded,
+                                      size: 56,
+                                      color: colors.micIcon,
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                            const SizedBox(width: AuraSpacing.md),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  'Hello,',
-                                  style: AuraTypography.caption(colors.textSecondary).copyWith(
-                                    letterSpacing: 0.4,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                ConstrainedBox(
-                                  constraints: const BoxConstraints(maxWidth: 170),
-                                  child: Text(
-                                    displayName,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AuraTypography.bodyLarge(colors.textPrimary).copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      height: 1.1,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
                           ],
                         ),
-                        Material(
-                          color: Colors.transparent,
-                          borderRadius: AuraRadius.smBr,
-                          child: InkWell(
-                            borderRadius: AuraRadius.smBr,
-                            onTap: () {
-                              HapticFeedback.lightImpact();
+                      ),
+                    ),
+                    const SizedBox(height: AuraSpacing.xxl),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        AuraSpacing.xl,
+                        0,
+                        AuraSpacing.xl,
+                        AuraSpacing.xl,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Center(
+                            child: Padding(
+                              padding: const EdgeInsets.only(
+                                bottom: AuraSpacing.xl,
+                              ),
+                              child: Column(
+                                children: [
+                                  Text(
+                                    'Tap to start recording',
+                                    style: AuraTypography.bodyMedium(
+                                      colors.textSecondary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: AuraSpacing.sm),
+                                  Container(
+                                    width: 44,
+                                    height: 2,
+                                    decoration: BoxDecoration(
+                                      color: colors.textTertiary.withValues(
+                                        alpha: 0.45,
+                                      ),
+                                      borderRadius: AuraRadius.fullBr,
+                                    ),
+                                  ),
+                                  if (_recordingStatus.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                        top: AuraSpacing.sm,
+                                      ),
+                                      child: Text(
+                                        _recordingStatus,
+                                        textAlign: TextAlign.center,
+                                        style: AuraTypography.overline(
+                                          colors.accent,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: AuraSpacing.lg),
+                          DashboardLowerContent(
+                            onUploadAudio: () {
+                              wakeBackend();
                               _showUploadSheet();
                             },
-                            child: Padding(
-                              padding: const EdgeInsets.all(AuraSpacing.xs),
-                              child: Icon(
-                                Icons.cloud_upload_outlined,
-                                color: colors.iconDefault,
-                                size: 24,
-                              ),
-                            ),
+                            onSummarize: () {
+                              wakeBackend();
+                              _selectTab(2);
+                            },
+                            onViewAllRecent: () => _selectTab(1),
+                            onRecentFileTap: (_) => _selectTab(1),
                           ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-                          ),
-                        ),
+                        ],
                       ),
-                      Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  0,
-                  AuraSpacing.huge,
-                  0,
-                  AuraSpacing.xxl,
-                ),
-                child: Column(
-                  children: [
-                    Text(
-                      'AURA',
-                      style: AuraTypography.headlineLarge(colors.textPrimary),
-                    ),
-                    const SizedBox(height: AuraSpacing.sm),
-                    Container(
-                      width: 40,
-                      height: 2,
-                      decoration: BoxDecoration(
-                        color: colors.textTertiary.withValues(alpha: 0.5),
-                        borderRadius: AuraRadius.fullBr,
-                      ),
-                    ),
-                    const SizedBox(height: AuraSpacing.base),
-                    Text(
-                      'Record now or import \n existing audio files to get started',
-                      textAlign: TextAlign.center,
-                      style: AuraTypography.bodyLarge(colors.textSecondary),
                     ),
                   ],
                 ),
               ),
-              Center(
-                child: SizedBox(
-                  width: 260,
-                  height: 260,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      AnimatedBuilder(
-                        animation: _pulseAnimation,
-                        builder: (context, child) {
-                          return Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              Container(
-                                width: 220 + (_pulseAnimation.value * 40),
-                                height: 220 + (_pulseAnimation.value * 40),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: colors.accent.withValues(
-                                      alpha: (1 - _pulseAnimation.value) * 0.25,
-                                    ),
-                                    width: 1.5,
-                                  ),
-                                ),
-                              ),
-                              Container(
-                                width: 190 + (_pulseAnimation.value * 30),
-                                height: 190 + (_pulseAnimation.value * 30),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: colors.accent.withValues(
-                                      alpha: (1 - _pulseAnimation.value) * 0.12,
-                                    ),
-                                    width: 1,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                      GestureDetector(
-                        onTap: () {
-                          HapticFeedback.mediumImpact();
-                          wakeBackend();
-                          _openRecordingSession();
-                        },
-                        child: ScaleTransition(
-                          scale: Tween<double>(begin: 1.0, end: 0.92).animate(
-                            CurvedAnimation(
-                              parent: _micController,
-                              curve: AuraMotion.standard,
-                            ),
-                          ),
-                          child: Container(
-                            width: 140,
-                            height: 140,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: colors.micButton,
-                              boxShadow: AuraElevation.glow(colors.micButton),
-                            ),
-                            child: Center(
-                              child: Icon(
-                                Icons.mic_rounded,
-                                size: 56,
-                                color: colors.micIcon,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: AuraSpacing.xxl),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AuraSpacing.xl,
-                  0,
-                  AuraSpacing.xl,
-                  AuraSpacing.xl,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: AuraSpacing.xl),
-                        child: Column(
-                          children: [
-                            Text(
-                              'Tap to start recording',
-                              style: AuraTypography.bodyMedium(colors.textSecondary),
-                            ),
-                            const SizedBox(height: AuraSpacing.sm),
-                            Container(
-                              width: 44,
-                              height: 2,
-                              decoration: BoxDecoration(
-                                color: colors.textTertiary.withValues(alpha: 0.45),
-                                borderRadius: AuraRadius.fullBr,
-                              ),
-                            ),
-                            if (_recordingStatus.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(top: AuraSpacing.sm),
-                                child: Text(
-                                  _recordingStatus,
-                                  textAlign: TextAlign.center,
-                                  style: AuraTypography.overline(colors.accent),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: AuraSpacing.lg),
-                    DashboardLowerContent(
-                      onUploadAudio: () {
-                        wakeBackend();
-                        _showUploadSheet();
-                      },
-                      onSummarize: () {
-                        wakeBackend();
-                        _selectTab(2);
-                      },
-                      onViewAllRecent: () => _selectTab(1),
-                      onRecentFileTap: (_) => _selectTab(1),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ), 
+            ),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: topInset,
+              child: Container(color: homeHeaderBg),
+            ),
+          ],
+        ),
       ),
-      Positioned(
-        top: 0,
-        left: 0,
-        right: 0,
-        height: topInset,
-        child: Container(color: homeHeaderBg),
-      ),
-    ],
-  ),
-),
     );
   }
 }

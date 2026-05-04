@@ -5,6 +5,7 @@ import 'package:flutter/gestures.dart';
 import '../providers/auth_provider.dart';
 import '../theme/aura_theme.dart';
 import '../theme/aura_tokens.dart';
+import '../widgets/aura_snack_bar.dart';
 
 class AuraAuthScreen extends StatefulWidget {
   const AuraAuthScreen({super.key});
@@ -45,7 +46,7 @@ class _AuraAuthScreenState extends State<AuraAuthScreen> {
 
     final message = authProvider.errorMessage;
     if (message != null && message.isNotEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      showAuraSnackBar(context, message: message);
       authProvider.clearError();
     }
   }
@@ -62,7 +63,7 @@ class _AuraAuthScreenState extends State<AuraAuthScreen> {
 
     final message = authProvider.errorMessage;
     if (message != null && message.isNotEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      showAuraSnackBar(context, message: message);
       authProvider.clearError();
     }
   }
@@ -100,7 +101,9 @@ class _AuraAuthScreenState extends State<AuraAuthScreen> {
                         const SizedBox(height: AuraSpacing.massive),
                         _AuthActionButton(
                           label: 'Continue with Google',
-                          onPressed: authProvider.isLoading ? null : _signInWithGoogle,
+                          onPressed: authProvider.isLoading
+                              ? null
+                              : _signInWithGoogle,
                           icon: SvgPicture.asset(
                             'assets/images/google_g_logo.svg',
                             width: 20,
@@ -114,7 +117,9 @@ class _AuraAuthScreenState extends State<AuraAuthScreen> {
                         const SizedBox(height: AuraSpacing.md),
                         _AuthActionButton(
                           label: 'Continue as Guest',
-                          onPressed: authProvider.isLoading ? null : _signInAsGuest,
+                          onPressed: authProvider.isLoading
+                              ? null
+                              : _signInAsGuest,
                           icon: Icon(
                             Icons.person_outline_rounded,
                             size: 22,
@@ -122,7 +127,9 @@ class _AuraAuthScreenState extends State<AuraAuthScreen> {
                           ),
                           isLoading: authProvider.isLoading,
                           textColor: Theme.of(context).colorScheme.onPrimary,
-                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.primary,
                           borderColor: Theme.of(context).colorScheme.primary,
                         ),
                       ],
@@ -231,8 +238,9 @@ class _AuthBrandHeader extends StatelessWidget {
     final colors = AuraThemeColors.of(context);
     final isDark = colors.isDark;
 
-    final primaryLogoAsset =
-        isDark ? 'assets/images/light.png' : 'assets/images/dark.png';
+    final primaryLogoAsset = isDark
+        ? 'assets/images/light.png'
+        : 'assets/images/dark.png';
     final fallbackLogoAsset = isDark
         ? 'assets/images/light_theme_logo.png'
         : 'assets/images/Dark_theme_logo.png';
@@ -263,7 +271,9 @@ class _AuthBrandHeader extends StatelessWidget {
         const SizedBox(height: AuraSpacing.base),
         Text(
           'AURA',
-          style: AuraTypography.displayLarge(colors.textPrimary).copyWith(letterSpacing: 3),
+          style: AuraTypography.displayLarge(
+            colors.textPrimary,
+          ).copyWith(letterSpacing: 3),
         ),
         const SizedBox(height: AuraSpacing.xs),
         Text(
